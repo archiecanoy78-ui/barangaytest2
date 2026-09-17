@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "664636874806",
+    "project_id": "barangaytest-74ca2",
+    "storage_bucket": "barangaytest-74ca2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:664636874806:android:80e7eb9e39f3ee3e513897",
+        "android_client_info": {
+          "package_name": "com.example.barangaytest"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA37o3P6pZva1kts5W706k3kDUAkf7afgE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
