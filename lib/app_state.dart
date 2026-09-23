@@ -105,63 +105,6 @@ class AppState extends ChangeNotifier {
     });
   }
 
-  Future<void> addAnnouncement(Announcement announcement) async {
-    final id = announcement.id ?? 'ann_${DateTime.now().millisecondsSinceEpoch}';
-    final ann = Announcement(
-      id: id,
-      title: announcement.title,
-      content: announcement.content,
-      date: announcement.date,
-      type: announcement.type,
-      priority: announcement.priority,
-      zone: announcement.zone,
-      status: announcement.status,
-      imageUrl: announcement.imageUrl,
-    );
-
-    await _firestore.collection('announcements').doc(id).set(ann.toMap());
-    logActivity(action: 'Add Announcement', complaintId: 'N/A', description: 'Added announcement: ${ann.title}');
-  }
-
-  Future<void> updateAnnouncement(Announcement announcement) async {
-    if (announcement.id == null) return;
-    await _firestore.collection('announcements').doc(announcement.id).set(announcement.toMap());
-    logActivity(action: 'Update Announcement', complaintId: 'N/A', description: 'Updated announcement: ${announcement.title}');
-  }
-
-  Future<void> deleteAnnouncement(String id) async {
-    try {
-      await _firestore.collection('announcements').doc(id).delete();
-      logActivity(action: 'Delete Announcement', complaintId: 'N/A', description: 'Deleted announcement id: $id');
-    } catch (e) {
-      debugPrint('Failed to delete announcement: $e');
-    }
-  }
-
-  // Create new incident helper for dashboard quick-add
-  Future<String> createIncident({
-    required String title,
-    required String category,
-    String description = '',
-    String purok = '',
-    String complainantName = 'Admin',
-    String complainantPhone = '',
-  }) async {
-    final id = generateComplaintId();
-    final report = Report(
-      id: id,
-      title: title,
-      category: category,
-      description: description,
-      purok: purok,
-      complainantName: complainantName,
-      complainantPhone: complainantPhone,
-    );
-
-    await addReport(report);
-    logActivity(action: 'Create Incident', complaintId: id, description: 'Created incident from dashboard: $title');
-    return id;
-  }
 
   void _listenToStaff() {
     _firestore.collection('users')
@@ -497,8 +440,8 @@ class AppState extends ChangeNotifier {
     return _reports.where((report) => report.assignedToId == staffId).toList();
   }
 
-  void addReport(Report report) {
-    _firestore.collection('reports').doc(report.id).set(report.toMap());
+  Future<void> addReport(Report report) async {
+    await _firestore.collection('reports').doc(report.id).set(report.toMap());
     final existingIndex = _reports.indexWhere((item) => item.id == report.id);
     if (existingIndex >= 0) {
       _reports[existingIndex] = report;
