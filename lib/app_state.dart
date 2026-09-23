@@ -1,190 +1,679 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'models/report.dart';
 import 'models/user.dart';
 import 'models/announcement.dart';
+import 'models/activity_log.dart';
 import 'models/message.dart';
+import 'dart:math';
 
 class AppState extends ChangeNotifier {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   User? _currentUser;
-  final List<Report> _reports = [];
-  final List<Message> _messages = [];
-  final List<Announcement> _announcements = [
-    Announcement(
-      title: 'Community Clean-up',
-      content: 'Join us this Saturday for a community clean-up drive.',
-      date: DateTime.now(),
-      type: 'Event',
-    ),
-    Announcement(
-      title: 'Water Service Interruption',
-      content: 'Scheduled maintenance from 8 AM to 5 PM.',
-      date: DateTime.now().add(const Duration(days: 1)),
-      type: 'Alert',
-    ),
+  List<Report> _reports = [];
+  List<Announcement> _announcements = [];
+  List<User> _staffList = [];
+  List<User> _allUsers = [];
+  List<User> _archivedUsers = [];
+  List<ActivityLog> _activityLogs = [];
+  List<Message> _messages = [];
+  List<String> _categories = [
+    'Noise / Disturbance',
+    'Garbage / Waste',
+    'Road / Infrastructure',
+    'Drainage',
+    'Street Lighting',
+    'Public Safety',
+    'Animal Concern',
+    'Neighborhood Dispute',
+    'Other'
   ];
 
-  final List<User> _allUsers = [
-    User(id: 'staff_001', name: 'Capt. Pedro', role: UserRole.staff, staffRole: StaffRole.captain, purok: 'Purok 1', phoneNumber: '091', isVerified: true),
-    User(id: 'staff_002', name: 'Tanod Juan', role: UserRole.staff, staffRole: StaffRole.tanod, purok: 'Purok 2', phoneNumber: '092', isVerified: true),
-    User(id: 'staff_003', name: 'Kagawad Maria', role: UserRole.staff, staffRole: StaffRole.kagawad, purok: 'Purok 3', phoneNumber: '093', isVerified: true),
-    User(id: 'res_001', name: 'John Resident', role: UserRole.resident, purok: 'Purok 1', phoneNumber: '094', isVerified: true),
-  ];
+  AppState() {
+    _initializeData();
+    _listenToReports();
+    _listenToAnnouncements();
+    _listenToStaff();
+    _listenToUsers();
+    _listenToActivityLogs();
+    _listenToMessages();
+  }
+
+  void _initializeData() async {
+    final residentSnapshot = await _firestore.collection('users').doc('resident_001').get();
+    final adminSnapshot = await _firestore.collection('users').doc('admin_001').get();
+    final staffSnapshot = await _firestore.collection('users').doc('staff_001').get();
+
+    final defaultUsers = [
+      User(
+        id: 'resident_001',
+        name: 'Resident User',
+        username: 'resident',
+        role: UserRole.resident,
+        purok: 'Purok 1',
+        phoneNumber: '09170000002',
+        password: 'password',
+      ),
+      User(
+        id: 'admin_001',
+        name: 'Administrator',
+        username: 'admin',
+        role: UserRole.admin,
+        staffRole: StaffRole.captain,
+        purok: 'Main',
+        phoneNumber: '09170000000',
+        password: 'password',
+      ),
+      User(
+        id: 'staff_001',
+        name: 'Barangay Staff',
+        username: 'staff',
+        role: UserRole.staff,
+        staffRole: StaffRole.tanod,
+        purok: 'Zone 1',
+        phoneNumber: '09170000001',
+        password: 'password',
+      ),
+    ];
+
+    final pendingUsers = defaultUsers.where((user) => ![
+      residentSnapshot.exists ? 'resident_001' : null,
+      adminSnapshot.exists ? 'admin_001' : null,
+      staffSnapshot.exists ? 'staff_001' : null,
+    ].contains(user.id)).toList();
+
+    if (pendingUsers.isNotEmpty) {
+      for (var user in pendingUsers) {
+        await _firestore.collection('users').doc(user.id).set(user.toMap());
+      }
+      debugPrint('Seeded ${pendingUsers.length} default users.');
+    }
+  }
+
+  void _listenToReports() {
+    _firestore.collection('reports').orderBy('timestamp', descending: true).snapshots().listen((snapshot) {
+      _reports = snapshot.docs.map((doc) => Report.fromMap(doc.data())).toList();
+      notifyListeners();
+    });
+  }
+
+  void _listenToAnnouncements() {
+    _firestore.collection('announcements').orderBy('date', descending: true).snapshots().listen((snapshot) {
+      _announcements = snapshot.docs.map((doc) => Announcement.fromMap(doc.data(), doc.id)).toList();
+      notifyListeners();
+    });
+  }
+
+  Future<void> addAnnouncement(Announcement announcement) async {
+    final id = announcement.id ?? 'ann_${DateTime.now().millisecondsSinceEpoch}';
+    final ann = Announcement(
+      id: id,
+      title: announcement.title,
+      content: announcement.content,
+      date: announcement.date,
+      type: announcement.type,
+      priority: announcement.priority,
+      zone: announcement.zone,
+      status: announcement.status,
+      imageUrl: announcement.imageUrl,
+    );
+
+    await _firestore.collection('announcements').doc(id).set(ann.toMap());
+    logActivity(action: 'Add Announcement', complaintId: 'N/A', description: 'Added announcement: ${ann.title}');
+  }
+
+  Future<void> updateAnnouncement(Announcement announcement) async {
+    if (announcement.id == null) return;
+    await _firestore.collection('announcements').doc(announcement.id).set(announcement.toMap());
+    logActivity(action: 'Update Announcement', complaintId: 'N/A', description: 'Updated announcement: ${announcement.title}');
+  }
+
+  Future<void> deleteAnnouncement(String id) async {
+    try {
+      await _firestore.collection('announcements').doc(id).delete();
+      logActivity(action: 'Delete Announcement', complaintId: 'N/A', description: 'Deleted announcement id: $id');
+    } catch (e) {
+      debugPrint('Failed to delete announcement: $e');
+    }
+  }
+
+  // Create new incident helper for dashboard quick-add
+  Future<String> createIncident({
+    required String title,
+    required String category,
+    String description = '',
+    String purok = '',
+    String complainantName = 'Admin',
+    String complainantPhone = '',
+  }) async {
+    final id = generateComplaintId();
+    final report = Report(
+      id: id,
+      title: title,
+      category: category,
+      description: description,
+      purok: purok,
+      complainantName: complainantName,
+      complainantPhone: complainantPhone,
+    );
+
+    await addReport(report);
+    logActivity(action: 'Create Incident', complaintId: id, description: 'Created incident from dashboard: $title');
+    return id;
+  }
+
+  void _listenToStaff() {
+    _firestore.collection('users')
+      .where('role', whereIn: ['staff', 'admin'])
+      .snapshots().listen((snapshot) {
+      _staffList = snapshot.docs.map((doc) => User.fromMap(doc.data())).toList();
+      notifyListeners();
+    });
+  }
+
+  void _listenToUsers() {
+    _firestore.collection('users').snapshots().listen((snapshot) {
+      _allUsers = snapshot.docs.map((doc) => User.fromMap(doc.data())).toList();
+      _archivedUsers = _allUsers.where((user) => user.isArchived).toList();
+      notifyListeners();
+    });
+  }
+
+  void _listenToMessages() {
+    _firestore.collection('messages').orderBy('timestamp', descending: true).snapshots().listen((snapshot) {
+      _messages = snapshot.docs.map((doc) => Message.fromMap(doc.data())).toList();
+      notifyListeners();
+    });
+  }
+
+  void _listenToActivityLogs() {
+    _firestore.collection('activity_logs').orderBy('timestamp', descending: true).limit(100).snapshots().listen((snapshot) {
+      _activityLogs = snapshot.docs.map((doc) => ActivityLog.fromMap(doc.data())).toList();
+      notifyListeners();
+    });
+  }
 
   User? get currentUser => _currentUser;
   List<Report> get reports => _reports;
   List<Announcement> get announcements => _announcements;
+  List<User> get staffList => _staffList;
+  List<User> get allUsers => _allUsers;
+  List<User> get archivedUsers => _archivedUsers;
+  List<ActivityLog> get activityLogs => _activityLogs;
   List<Message> get messages => _messages;
-  List<User> get allUsers => _allUsers.where((u) => !u.isArchived).toList();
-  List<User> get archivedUsers => _allUsers.where((u) => u.isArchived).toList();
+  List<String> get categories => _categories;
+  List<Report> get activeSOS => _reports.where((report) => report.isSOS).toList();
 
-  void login(UserRole role) {
-    if (role == UserRole.resident) {
-      _currentUser = _allUsers.firstWhere((u) => u.id == 'res_001');
-    } else if (role == UserRole.staff) {
-      _currentUser = _allUsers.firstWhere((u) => u.id == 'staff_001');
-    } else if (role == UserRole.guest) {
-      _currentUser = User(
-        id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
-        name: 'Guest User',
-        role: UserRole.guest,
-        purok: 'Unknown',
-        phoneNumber: 'N/A',
-        isVerified: false,
+  // Auth Methods
+  Future<String?> loginWithCredentials(String username, String password) async {
+    final cleanUsername = username.trim().toLowerCase();
+    final cleanPassword = password.trim();
+
+    try {
+      final snapshot = await _firestore.collection('users')
+          .where('username', isEqualTo: cleanUsername)
+          .where('password', isEqualTo: cleanPassword)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        return "Invalid username or password.";
+      }
+
+      final userData = snapshot.docs.first.data();
+      _currentUser = User.fromMap(userData);
+
+      logActivity(
+        action: "Login",
+        complaintId: "N/A",
+        description: "${_currentUser?.role.name.toUpperCase()} logged in: ${_currentUser?.name}"
       );
+
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return "Login error: ${e.toString()}";
+    }
+  }
+
+  void continueAsGuest() {
+    _currentUser = User(
+      id: 'guest_session',
+      name: 'Guest User',
+      username: 'guest',
+      role: UserRole.guest,
+      purok: 'Guest',
+      phoneNumber: 'N/A',
+      password: 'guest',
+    );
+    notifyListeners();
+  }
+
+  Future<void> sendMessage(Message message) async {
+    await _firestore.collection('messages').doc(message.id).set(message.toMap());
+    _messages.add(message);
+    notifyListeners();
+  }
+
+  List<Message> getMessagesForRole(String recipientPosition) {
+    return _messages.where((message) => message.recipientPosition == recipientPosition).toList();
+  }
+
+  void logout() {
+    logActivity(
+      action: "Logout",
+      complaintId: "N/A",
+      description: "Admin/Staff logged out: ${_currentUser?.name}"
+    );
+    _currentUser = null;
+    notifyListeners();
+  }
+
+  // Activity Logging
+  void logActivity({required String action, required String complaintId, required String description}) {
+    final log = ActivityLog(
+      id: 'log_${DateTime.now().millisecondsSinceEpoch}',
+      timestamp: DateTime.now(),
+      user: _currentUser?.name ?? "Guest",
+      action: action,
+      complaintId: complaintId,
+      description: description,
+    );
+    _firestore.collection('activity_logs').doc(log.id).set(log.toMap());
+  }
+
+  Future<void> updateUser(User user) async {
+    await _firestore.collection('users').doc(user.id).set(user.toMap());
+    if (_currentUser?.id == user.id) {
+      _currentUser = user;
     }
     notifyListeners();
   }
 
-  void registerResident({
+  Future<void> archiveUser(String userId) async {
+    final user = _allUsers.firstWhere((candidate) => candidate.id == userId, orElse: () => _currentUser!);
+    final archivedUser = User(
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      role: user.role,
+      staffRole: user.staffRole,
+      purok: user.purok,
+      phoneNumber: user.phoneNumber,
+      isVerified: user.isVerified,
+      idImagePath: user.idImagePath,
+      faceData: user.faceData,
+      isArchived: true,
+      password: user.password,
+    );
+    await updateUser(archivedUser);
+  }
+
+  Future<void> restoreUser(String userId) async {
+    final user = _allUsers.firstWhere((candidate) => candidate.id == userId, orElse: () => _currentUser!);
+    final restoredUser = User(
+      id: user.id,
+      name: user.name,
+      username: user.username,
+      role: user.role,
+      staffRole: user.staffRole,
+      purok: user.purok,
+      phoneNumber: user.phoneNumber,
+      isVerified: user.isVerified,
+      idImagePath: user.idImagePath,
+      faceData: user.faceData,
+      isArchived: false,
+      password: user.password,
+    );
+    await updateUser(restoredUser);
+  }
+
+  Future<void> verifyResident(String userId) async {
+    final user = _allUsers.firstWhere((candidate) => candidate.id == userId, orElse: () => _currentUser!);
+    await updateUser(
+      User(
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        role: user.role,
+        staffRole: user.staffRole,
+        purok: user.purok,
+        phoneNumber: user.phoneNumber,
+        isVerified: true,
+        idImagePath: user.idImagePath,
+        faceData: user.faceData,
+        isArchived: user.isArchived,
+        password: user.password,
+      ),
+    );
+  }
+
+  Future<void> registerResident({
     required String name,
+    required String username,
     required String purok,
     required String phoneNumber,
     required String idPath,
     required String faceData,
-  }) {
-    final newUser = User(
-      id: 'res_${DateTime.now().millisecondsSinceEpoch}',
+    required String password,
+  }) async {
+    final user = User(
+      id: 'resident_${DateTime.now().millisecondsSinceEpoch}',
       name: name,
+      username: username,
       role: UserRole.resident,
       purok: purok,
       phoneNumber: phoneNumber,
       isVerified: false,
       idImagePath: idPath,
       faceData: faceData,
+      password: password,
     );
-    _allUsers.add(newUser);
-    _currentUser = newUser;
+
+    await _firestore.collection('users').doc(user.id).set(user.toMap());
+    _allUsers.add(user);
     notifyListeners();
   }
 
-  void logout() {
-    _currentUser = null;
+  Future<void> addStaff({
+    required String name,
+    required String username,
+    required StaffRole staffRole,
+    required String purok,
+    required String phoneNumber,
+    required String password,
+    UserRole role = UserRole.staff,
+  }) async {
+    final newId = 'staff_${DateTime.now().millisecondsSinceEpoch}';
+    final user = User(
+      id: newId,
+      name: name,
+      username: username,
+      role: role,
+      staffRole: staffRole,
+      purok: purok,
+      phoneNumber: phoneNumber,
+      isVerified: true,
+      password: password,
+    );
+
+    await _firestore.collection('users').doc(newId).set(user.toMap());
+    logActivity(
+      action: "Add Staff",
+      complaintId: "N/A",
+      description: "Added new staff member: $name ($username)"
+    );
     notifyListeners();
+  }
+
+  Future<void> addResident({
+    required String name,
+    required String username,
+    required String purok,
+    required String phoneNumber,
+    required String password,
+    bool isVerified = true,
+  }) async {
+    final newId = 'resident_${DateTime.now().millisecondsSinceEpoch}';
+    final user = User(
+      id: newId,
+      name: name,
+      username: username,
+      role: UserRole.resident,
+      purok: purok,
+      phoneNumber: phoneNumber,
+      isVerified: isVerified,
+      password: password,
+    );
+
+    await _firestore.collection('users').doc(newId).set(user.toMap());
+    logActivity(
+      action: "Add Resident",
+      complaintId: "N/A",
+      description: "Added new resident: $name ($username)"
+    );
+    notifyListeners();
+  }
+
+  Future<String?> deleteUser(String userId) async {
+    final userList = _allUsers.where((u) => u.id == userId).toList();
+    if (userList.isNotEmpty) {
+      final targetUser = userList.first;
+      if (targetUser.role == UserRole.resident && !targetUser.isArchived) {
+        return "Cannot delete active resident. Resident must be archived first.";
+      }
+    }
+
+    await _firestore.collection('users').doc(userId).delete();
+    _allUsers.removeWhere((u) => u.id == userId);
+    _staffList.removeWhere((u) => u.id == userId);
+    _archivedUsers.removeWhere((u) => u.id == userId);
+    logActivity(
+      action: "Delete User",
+      complaintId: "N/A",
+      description: "Deleted user ID: $userId"
+    );
+    notifyListeners();
+    return null;
+  }
+
+  // Complaint Management
+  String generateComplaintId() {
+    final year = DateTime.now().year;
+    final random = Random();
+    final number = random.nextInt(900000) + 100000; // 6 digits
+    return "BR-$year-$number";
+  }
+
+  Future<String> submitComplaint(Report report) async {
+    try {
+      await _firestore.collection('reports').doc(report.id).set(report.toMap());
+      
+      logActivity(
+        action: "Filed Complaint",
+        complaintId: report.id,
+        description: "${report.category}: ${report.title}"
+      );
+      
+      return report.id;
+    } catch (e) {
+      throw Exception("Failed to submit complaint: $e");
+    }
+  }
+
+  Report? getReportById(String id) {
+    try {
+      return _reports.firstWhere((r) => r.id.toUpperCase() == id.toUpperCase());
+    } catch (e) {
+      return null;
+    }
+  }
+
+  List<Report> getReportsForUser(String userId) {
+    return _reports.where((report) => report.reporterId == userId).toList();
+  }
+
+  List<Report> getAssignedReports(String staffId) {
+    return _reports.where((report) => report.assignedToId == staffId).toList();
   }
 
   void addReport(Report report) {
-    _reports.add(report);
+    _firestore.collection('reports').doc(report.id).set(report.toMap());
+    final existingIndex = _reports.indexWhere((item) => item.id == report.id);
+    if (existingIndex >= 0) {
+      _reports[existingIndex] = report;
+    } else {
+      _reports.insert(0, report);
+    }
     notifyListeners();
   }
 
   void confirmReport(String reportId, String userId) {
-    final index = _reports.indexWhere((r) => r.id == reportId);
-    if (index != -1) {
-      if (!_reports[index].confirmations.contains(userId)) {
-        _reports[index].confirmations.add(userId);
-        notifyListeners();
-      }
+    final index = _reports.indexWhere((report) => report.id == reportId);
+    if (index == -1) return;
+
+    final report = _reports[index];
+    final confirmations = List<String>.from(report.confirmations);
+    if (!confirmations.contains(userId)) {
+      confirmations.add(userId);
     }
+
+    final updated = Report(
+      id: report.id,
+      title: report.title,
+      category: report.category,
+      description: report.description,
+      incidentLocation: report.incidentLocation,
+      incidentDateTime: report.incidentDateTime,
+      purok: report.purok,
+      complainantName: report.complainantName,
+      complainantPhone: report.complainantPhone,
+      complainantEmail: report.complainantEmail,
+      status: report.status,
+      timestamp: report.timestamp,
+      assignedToId: report.assignedToId,
+      investigationNotes: report.investigationNotes,
+      actionTaken: report.actionTaken,
+      resolutionProof: report.resolutionProof,
+      reporterId: report.reporterId,
+      attachmentUrls: report.attachmentUrls,
+      priority: report.priority,
+      isAnonymous: report.isAnonymous,
+      hasMedia: report.hasMedia,
+      metadataValid: report.metadataValid,
+      isPotentialDuplicate: report.isPotentialDuplicate,
+      contactInfo: report.contactInfo,
+      confirmations: confirmations,
+      riskScore: report.riskScore,
+      remarks: report.remarks,
+      isSOS: report.isSOS,
+    );
+
+    _reports[index] = updated;
+    _firestore.collection('reports').doc(reportId).update({'confirmations': confirmations});
+    notifyListeners();
   }
 
   RiskLevel calculateRisk(Report report) {
-    int score = 0;
-    if (report.isAnonymous) score += 2;
-    if (!report.hasMedia) score += 3;
-    if (!report.metadataValid) score += 2;
-    if (report.isPotentialDuplicate) score += 1;
-    if (report.description.length < 20) score += 1;
-    if (report.contactInfo != null && report.contactInfo!.isNotEmpty) score -= 1;
-    
-    // Lower risk based on crowd verification
-    score -= report.confirmations.length;
-
-    if (score >= 5) return RiskLevel.high;
-    if (score >= 3) return RiskLevel.medium;
+    final text = '${report.title} ${report.description} ${report.category}'.toLowerCase();
+    if (text.contains('fire') || text.contains('medical') || text.contains('security') || text.contains('emergency')) {
+      return RiskLevel.high;
+    }
+    if (text.contains('noise') || text.contains('waste') || text.contains('street') || text.contains('drainage')) {
+      return RiskLevel.medium;
+    }
     return RiskLevel.low;
   }
 
-  void updateReportStatus(String reportId, ReportStatus newStatus) {
-    final index = _reports.indexWhere((r) => r.id == reportId);
-    if (index != -1) {
-      _reports[index].status = newStatus;
-      notifyListeners();
-    }
-  }
+  void addRemarks(String reportId, String remark) {
+    if (remark.trim().isEmpty) return;
+    final reportIndex = _reports.indexWhere((report) => report.id == reportId);
+    if (reportIndex == -1) return;
 
-  void assignReport(String reportId, String staffId) {
-    final index = _reports.indexWhere((r) => r.id == reportId);
-    if (index != -1) {
-      _reports[index].assignedToId = staffId;
-      _reports[index].status = ReportStatus.assigned;
-      notifyListeners();
-    }
-  }
+    final report = _reports[reportIndex];
+    final combinedRemarks = [report.remarks, remark].where((entry) => entry.trim().isNotEmpty).join('\n');
+    final updated = Report(
+      id: report.id,
+      title: report.title,
+      category: report.category,
+      description: report.description,
+      incidentLocation: report.incidentLocation,
+      incidentDateTime: report.incidentDateTime,
+      purok: report.purok,
+      complainantName: report.complainantName,
+      complainantPhone: report.complainantPhone,
+      complainantEmail: report.complainantEmail,
+      status: report.status,
+      timestamp: report.timestamp,
+      assignedToId: report.assignedToId,
+      investigationNotes: report.investigationNotes,
+      actionTaken: report.actionTaken,
+      resolutionProof: report.resolutionProof,
+      reporterId: report.reporterId,
+      attachmentUrls: report.attachmentUrls,
+      priority: report.priority,
+      isAnonymous: report.isAnonymous,
+      hasMedia: report.hasMedia,
+      metadataValid: report.metadataValid,
+      isPotentialDuplicate: report.isPotentialDuplicate,
+      contactInfo: report.contactInfo,
+      confirmations: report.confirmations,
+      riskScore: report.riskScore,
+      remarks: combinedRemarks,
+      isSOS: report.isSOS,
+    );
 
-  void addRemarks(String reportId, String remarks) {
-    final index = _reports.indexWhere((r) => r.id == reportId);
-    if (index != -1) {
-      _reports[index].remarks = remarks;
-      notifyListeners();
-    }
-  }
-
-  void addAnnouncement(Announcement announcement) {
-    _announcements.insert(0, announcement);
+    _reports[reportIndex] = updated;
+    _firestore.collection('reports').doc(reportId).update({'remarks': combinedRemarks});
     notifyListeners();
   }
 
-  void sendMessage(Message message) {
-    _messages.insert(0, message);
+  void updateReportStatus(String reportId, ReportStatus newStatus, {String? notes, String? actionTaken, String? priority}) {
+    final Map<String, dynamic> updates = {'status': newStatus.name};
+    if (notes != null) updates['investigationNotes'] = notes;
+    if (actionTaken != null) updates['actionTaken'] = actionTaken;
+    if (priority != null) updates['priority'] = priority;
+
+    _firestore.collection('reports').doc(reportId).update(updates);
+
+    final reportIndex = _reports.indexWhere((report) => report.id == reportId);
+    if (reportIndex != -1) {
+      final report = _reports[reportIndex];
+      _reports[reportIndex] = Report(
+        id: report.id,
+        title: report.title,
+        category: report.category,
+        description: report.description,
+        incidentLocation: report.incidentLocation,
+        incidentDateTime: report.incidentDateTime,
+        purok: report.purok,
+        complainantName: report.complainantName,
+        complainantPhone: report.complainantPhone,
+        complainantEmail: report.complainantEmail,
+        status: newStatus,
+        timestamp: report.timestamp,
+        assignedToId: report.assignedToId,
+        investigationNotes: notes ?? report.investigationNotes,
+        actionTaken: actionTaken ?? report.actionTaken,
+        resolutionProof: report.resolutionProof,
+        reporterId: report.reporterId,
+        attachmentUrls: report.attachmentUrls,
+        priority: priority ?? report.priority,
+        isAnonymous: report.isAnonymous,
+        hasMedia: report.hasMedia,
+        metadataValid: report.metadataValid,
+        isPotentialDuplicate: report.isPotentialDuplicate,
+        contactInfo: report.contactInfo,
+        confirmations: report.confirmations,
+        riskScore: report.riskScore,
+        remarks: report.remarks,
+        isSOS: report.isSOS,
+      );
+    }
+
+    logActivity(
+      action: "Updated Complaint",
+      complaintId: reportId,
+      description: "Status changed to ${newStatus.name}"
+    );
     notifyListeners();
   }
 
-  List<Message> getMessagesForRole(String position) {
-    return _messages.where((m) => m.recipientPosition == position).toList();
+  void assignStaff(String reportId, String staffId) {
+    final staff = _staffList.firstWhere((s) => s.id == staffId);
+    _firestore.collection('reports').doc(reportId).update({
+      'assignedToId': staffId,
+      'status': ReportStatus.underInvestigation.name,
+    });
+
+    logActivity(
+      action: "Assigned Staff",
+      complaintId: reportId,
+      description: "Assigned to ${staff.name}"
+    );
   }
 
-  void verifyResident(String userId) {
-    final index = _allUsers.indexWhere((u) => u.id == userId);
-    if (index != -1) {
-      _allUsers[index].isVerified = true;
-      notifyListeners();
-    }
-  }
-
-  void updateUser(User updatedUser) {
-    final index = _allUsers.indexWhere((u) => u.id == updatedUser.id);
-    if (index != -1) {
-      _allUsers[index] = updatedUser;
-      notifyListeners();
-    }
-  }
-
-  void archiveUser(String userId) {
-    final index = _allUsers.indexWhere((u) => u.id == userId);
-    if (index != -1) {
-      _allUsers[index].isArchived = true;
-      notifyListeners();
-    }
-  }
-
-  void restoreUser(String userId) {
-    final index = _allUsers.indexWhere((u) => u.id == userId);
-    if (index != -1) {
-      _allUsers[index].isArchived = false;
-      notifyListeners();
-    }
-  }
-
+  // Analytics
   Map<String, int> getReportCountsByStatus() {
     final Map<String, int> counts = {};
     for (var r in _reports) {
@@ -193,7 +682,7 @@ class AppState extends ChangeNotifier {
     return counts;
   }
 
-  Map<String, int> getReportCountsByCategory() {
+  Map<String, int> getReportsByCategory() {
     final Map<String, int> counts = {};
     for (var r in _reports) {
       counts[r.category] = (counts[r.category] ?? 0) + 1;
@@ -201,19 +690,81 @@ class AppState extends ChangeNotifier {
     return counts;
   }
 
-  List<Report> getReportsForUser(String userId) {
-    return _reports.where((r) => r.reporterId == userId && !r.isSOS).toList();
-  }
-
-  List<Report> get activeSOS {
-    return _reports.where((r) => r.isSOS && (r.status != ReportStatus.resolved && r.status != ReportStatus.closed)).toList();
-  }
-
-  List<Report> getAssignedReports(String staffId) {
-    // If Captain, see all. If specific personnel, see theirs.
-    if (_currentUser?.staffRole == StaffRole.captain) {
-      return _reports;
+  Map<String, int> getReportsByPurok() {
+    final Map<String, int> counts = {};
+    for (var r in _reports) {
+      counts[r.purok] = (counts[r.purok] ?? 0) + 1;
     }
-    return _reports.where((r) => (r.assignedToId == staffId || r.status == ReportStatus.pending) && !r.isSOS).toList();
+    return counts;
+  }
+
+  // Category Management
+  void addCategory(String category) {
+    if (!_categories.contains(category)) {
+      _categories.add(category);
+      notifyListeners();
+    }
+  }
+
+  void removeCategory(String category) {
+    _categories.remove(category);
+    notifyListeners();
+  }
+
+  // Announcement Management
+  Future<void> addAnnouncement(Announcement announcement) async {
+    await _firestore.collection('announcements').add(announcement.toMap());
+    logActivity(
+      action: "Added Announcement",
+      complaintId: "N/A",
+      description: "Title: ${announcement.title}"
+    );
+  }
+
+  Future<void> updateAnnouncement(Announcement announcement) async {
+    if (announcement.id != null && announcement.id!.isNotEmpty) {
+      await _firestore.collection('announcements').doc(announcement.id).update(announcement.toMap());
+    } else {
+      final snapshot = await _firestore.collection('announcements')
+          .where('title', isEqualTo: announcement.title)
+          .get();
+      for (var doc in snapshot.docs) {
+        await doc.reference.update(announcement.toMap());
+      }
+    }
+    logActivity(
+      action: "Updated Announcement",
+      complaintId: "N/A",
+      description: "Title: ${announcement.title}"
+    );
+  }
+
+  Future<void> deleteAnnouncement(String idOrTitle) async {
+    if (idOrTitle.isEmpty) return;
+    try {
+      final docSnapshot = await _firestore.collection('announcements').doc(idOrTitle).get();
+      if (docSnapshot.exists) {
+        await docSnapshot.reference.delete();
+      } else {
+        final querySnapshot = await _firestore.collection('announcements')
+            .where('title', isEqualTo: idOrTitle)
+            .get();
+        for (var doc in querySnapshot.docs) {
+          await doc.reference.delete();
+        }
+      }
+    } catch (e) {
+      final querySnapshot = await _firestore.collection('announcements')
+          .where('title', isEqualTo: idOrTitle)
+          .get();
+      for (var doc in querySnapshot.docs) {
+        await doc.reference.delete();
+      }
+    }
+    logActivity(
+      action: "Deleted Announcement",
+      complaintId: "N/A",
+      description: "Target: $idOrTitle"
+    );
   }
 }
