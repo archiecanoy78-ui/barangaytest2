@@ -8,7 +8,7 @@ import 'models/message.dart';
 import 'dart:math';
 
 class AppState extends ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore;
 
   User? _currentUser;
   List<Report> _reports = [];
@@ -66,19 +66,25 @@ class AppState extends ChangeNotifier {
   ];
 
   AppState() {
-    _initializeData();
-    _listenToReports();
-    _listenToAnnouncements();
-    _listenToStaff();
-    _listenToUsers();
-    _listenToActivityLogs();
-    _listenToMessages();
+    try {
+      _firestore = FirebaseFirestore.instance;
+      _initializeData();
+      _listenToReports();
+      _listenToAnnouncements();
+      _listenToStaff();
+      _listenToUsers();
+      _listenToActivityLogs();
+      _listenToMessages();
+    } catch (e) {
+      debugPrint("AppState Firestore init skipped or failed: $e");
+    }
   }
 
   void _initializeData() async {
-    final residentSnapshot = await _firestore.collection('users').doc('resident_001').get();
-    final adminSnapshot = await _firestore.collection('users').doc('admin_001').get();
-    final staffSnapshot = await _firestore.collection('users').doc('staff_001').get();
+    if (_firestore == null) return;
+    final residentSnapshot = await _firestore!.collection('users').doc('resident_001').get();
+    final adminSnapshot = await _firestore!.collection('users').doc('admin_001').get();
+    final staffSnapshot = await _firestore!.collection('users').doc('staff_001').get();
 
     final defaultUsers = [
       User(
@@ -120,21 +126,21 @@ class AppState extends ChangeNotifier {
 
     if (pendingUsers.isNotEmpty) {
       for (var user in pendingUsers) {
-        await _firestore.collection('users').doc(user.id).set(user.toMap());
+        await _firestore!.collection('users').doc(user.id).set(user.toMap());
       }
       debugPrint('Seeded ${pendingUsers.length} default users.');
     }
   }
 
   void _listenToReports() {
-    _firestore.collection('reports').orderBy('timestamp', descending: true).snapshots().listen((snapshot) {
+    _firestore?.collection('reports').orderBy('timestamp', descending: true).snapshots().listen((snapshot) {
       _reports = snapshot.docs.map((doc) => Report.fromMap(doc.data())).toList();
       notifyListeners();
     });
   }
 
   void _listenToAnnouncements() {
-    _firestore.collection('announcements').orderBy('date', descending: true).snapshots().listen((snapshot) {
+    _firestore?.collection('announcements').orderBy('date', descending: true).snapshots().listen((snapshot) {
       _announcements = snapshot.docs.map((doc) => Announcement.fromMap(doc.data(), doc.id)).toList();
       notifyListeners();
     });
@@ -142,7 +148,7 @@ class AppState extends ChangeNotifier {
 
 
   void _listenToStaff() {
-    _firestore.collection('users')
+    _firestore?.collection('users')
       .where('role', whereIn: ['staff', 'admin'])
       .snapshots().listen((snapshot) {
       _staffList = snapshot.docs.map((doc) => User.fromMap(doc.data())).toList();
@@ -151,7 +157,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _listenToUsers() {
-    _firestore.collection('users').snapshots().listen((snapshot) {
+    _firestore?.collection('users').snapshots().listen((snapshot) {
       _allUsers = snapshot.docs.map((doc) => User.fromMap(doc.data())).toList();
       _archivedUsers = _allUsers.where((user) => user.isArchived).toList();
       notifyListeners();
@@ -159,14 +165,14 @@ class AppState extends ChangeNotifier {
   }
 
   void _listenToMessages() {
-    _firestore.collection('messages').orderBy('timestamp', descending: true).snapshots().listen((snapshot) {
+    _firestore?.collection('messages').orderBy('timestamp', descending: true).snapshots().listen((snapshot) {
       _messages = snapshot.docs.map((doc) => Message.fromMap(doc.data())).toList();
       notifyListeners();
     });
   }
 
   void _listenToActivityLogs() {
-    _firestore.collection('activity_logs').orderBy('timestamp', descending: true).limit(100).snapshots().listen((snapshot) async {
+    _firestore?.collection('activity_logs').orderBy('timestamp', descending: true).limit(100).snapshots().listen((snapshot) async {
       final now = DateTime.now();
       final cutoff = now.subtract(const Duration(hours: 23));
 
