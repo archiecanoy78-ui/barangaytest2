@@ -1,10 +1,8 @@
-# Task - Firestore Integration
+# Task - Navigation Refactor & Announcement Posting
 
-- [ ] Add `cloud_firestore` dependency to `pubspec.yaml`
-- [ ] Add `toMap` and `fromMap`/`fromFirestore` methods to data models:
-    - [ ] `User` (`lib/models/user.dart`)
-    - [ ] `Report` (`lib/models/report.dart`)
-    - [ ] `Message` (`lib/models/message.dart`)
-    - [ ] `Announcement` (`lib/models/announcement.dart`)
-- [ ] Update `AppState` (`lib/app_state.dart`) to read/write from Firestore
-- [ ] Verify the code builds and has no compilation errors
+- [x] Refactor `StaffMain` navigation logic:
+    - [x] Staff: Dash, Reports, Inbox, Map
+    - [x] Admin: Dash, Directory, Inbox, Map
+- [x] Add "Post Announcement" Quick Action to `DashboardScreen` for both roles
+- [x] Rename and update `ManagementScreen` to "Directory"
+- [x] Verify clean build status

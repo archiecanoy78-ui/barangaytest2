@@ -18,6 +18,41 @@ class AppState extends ChangeNotifier {
   List<User> _archivedUsers = [];
   List<ActivityLog> _activityLogs = [];
   List<Message> _messages = [];
+  
+  List<Map<String, dynamic>> get staffNotifications {
+    return _reports.map((report) => {
+      'id': report.id,
+      'type': 'issue_reported',
+      'title': report.isSOS ? '🚨 EMERGENCY SOS: ${report.title}' : 'New Complaint: ${report.title}',
+      'subtitle': '${report.category} • ${report.purok.isNotEmpty ? report.purok : 'Purok 1'}',
+      'timestamp': report.timestamp,
+      'isEmergency': report.isSOS,
+      'status': report.isRead ? 'read' : 'unread',
+      'report': report,
+    }).toList();
+  }
+
+  int get unreadStaffNotificationsCount {
+    return staffNotifications.where((n) => n['type'] == 'issue_reported' && n['status'] == 'unread').length;
+  }
+
+  Future<void> markReportAsRead(String reportId) async {
+    final index = _reports.indexWhere((r) => r.id == reportId);
+    if (index >= 0) {
+      _reports[index].isRead = true;
+      try {
+        await _firestore.collection('reports').doc(reportId).update({'isRead': true});
+      } catch (_) {}
+      notifyListeners();
+    }
+  }
+
+  void markNotificationsAsRead() {
+    for (var r in _reports) {
+      r.isRead = true;
+    }
+    notifyListeners();
+  }
   List<String> _categories = [
     'Noise / Disturbance',
     'Garbage / Waste',
@@ -131,8 +166,26 @@ class AppState extends ChangeNotifier {
   }
 
   void _listenToActivityLogs() {
-    _firestore.collection('activity_logs').orderBy('timestamp', descending: true).limit(100).snapshots().listen((snapshot) {
-      _activityLogs = snapshot.docs.map((doc) => ActivityLog.fromMap(doc.data())).toList();
+    _firestore.collection('activity_logs').orderBy('timestamp', descending: true).limit(100).snapshots().listen((snapshot) async {
+      final now = DateTime.now();
+      final cutoff = now.subtract(const Duration(hours: 23));
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        if (data['timestamp'] != null) {
+          final timestamp = (data['timestamp'] is Timestamp)
+              ? (data['timestamp'] as Timestamp).toDate()
+              : DateTime.tryParse(data['timestamp'].toString()) ?? now;
+          if (timestamp.isBefore(cutoff)) {
+            await doc.reference.delete();
+          }
+        }
+      }
+
+      _activityLogs = snapshot.docs
+          .map((doc) => ActivityLog.fromMap(doc.data()))
+          .where((log) => log.timestamp.isAfter(cutoff))
+          .toList();
       notifyListeners();
     });
   }
@@ -325,6 +378,7 @@ class AppState extends ChangeNotifier {
     required String purok,
     required String phoneNumber,
     required String password,
+    String? idPhotoUrl,
     UserRole role = UserRole.staff,
   }) async {
     final newId = 'staff_${DateTime.now().millisecondsSinceEpoch}';
@@ -336,7 +390,10 @@ class AppState extends ChangeNotifier {
       staffRole: staffRole,
       purok: purok,
       phoneNumber: phoneNumber,
-      isVerified: true,
+      isVerified: idPhotoUrl != null,
+      idImagePath: idPhotoUrl,
+      idPhotoUrl: idPhotoUrl,
+      verificationStatus: idPhotoUrl != null ? 'Verified' : 'Pending Verification',
       password: password,
     );
 
@@ -344,7 +401,7 @@ class AppState extends ChangeNotifier {
     logActivity(
       action: "Add Staff",
       complaintId: "N/A",
-      description: "Added new staff member: $name ($username)"
+      description: "Added new staff member: $name ($username) [Pending ID Verification]"
     );
     notifyListeners();
   }
@@ -449,6 +506,28 @@ class AppState extends ChangeNotifier {
       _reports.insert(0, report);
     }
     notifyListeners();
+  }
+
+  Future<void> deleteAllComplaints() async {
+    try {
+      final snapshot = await _firestore.collection('reports').get();
+      final batch = _firestore.batch();
+      for (var doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      _reports.clear();
+      logActivity(
+        action: "Delete All Complaints",
+        complaintId: "ALL",
+        description: "Deleted all resident complaints from the database."
+      );
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Failed to delete all complaints: $e");
+      throw Exception("Failed to delete all complaints: $e");
+    }
   }
 
   void confirmReport(String reportId, String userId) {

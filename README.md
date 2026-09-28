@@ -1,17 +1,34 @@
-# barangaytest
+# Barangay Putho-Tuntungin Boundary Map
 
-A new Flutter project.
+This is a plain HTML + JavaScript + Leaflet.js app. It serves a web map that is restricted to Barangay Putho-Tuntungin, Los Baños, Laguna, Philippines.
 
-## Getting Started
+## What is included
 
-This project is a starting point for a Flutter application.
+- A static OSM-derived GeoJSON at `data/putho-tuntungin.geojson`
+- A Leaflet map locked to the barangay boundary with a red-and-white dashed border
+- A dark outside mask so everything beyond the barangay is dimmed
+- A reset view button and optional base-layer toggle
+- Turf.js point-in-polygon checks to reject clicks or markers outside the barangay
 
-A few resources to get you started if this is your first Flutter project:
+## Boundary source
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+The official polygon was fetched from Nominatim using the official boundary GeoJSON output for:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+`Putho-Tuntungin, Los Baños, Laguna, Philippines`
+
+The result was saved locally to `data/putho-tuntungin.geojson`, so the app does not query Nominatim or Overpass at runtime.
+
+## Local setup
+
+1. Install dependencies:
+  `npm install`
+2. Start the app:
+  `node server.js`
+3. Open:
+  `http://localhost:3000/`
+
+## Notes
+
+- The default tiles are standard OpenStreetMap tiles with the required attribution: `© OpenStreetMap contributors`.
+- The optional Esri satellite layer is included for reference and matches the map style in the screenshot.
+- For production traffic, use a proper tile provider or a commercial mapping plan that complies with usage policies; avoid bulk scraping or unlicensed tile use.

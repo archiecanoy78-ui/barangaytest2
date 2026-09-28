@@ -19,74 +19,33 @@ class _HomeScreenState extends State<HomeScreen> {
   final Set<String> _likedPosts = {};
   final Set<String> _savedPosts = {};
 
-  final List<Map<String, dynamic>> _announcements = [
-    {
-      'id': 'ann_1',
-      'avatarText': 'HC',
-      'avatarBg': Color(0xFFD6E4FF),
-      'avatarColor': Color(0xFF1D39C4),
-      'author': 'Barangay Health Center',
-      'isVerified': true,
-      'subtitle': 'Dr. M. Santos, Municipal Health Officer',
-      'time': '2h ago',
-      'category': 'Health & Safety',
-      'tagText': 'Free Immunization & Medical Mission',
-      'tagBg': Color(0xFFE8F5E9),
-      'tagColor': Color(0xFF2E7D32),
-      'title': 'Free Pediatric Flu Vaccines and Health Consultation this Saturday',
-      'content':
-          'All parents with children aged 6 months to 12 years are invited to the Barangay Health Hall from 8:00 AM to 3:00 PM. Please bring your Yellow Health booklet.',
-      'likes': 84,
-      'comments': 19,
-    },
-    {
-      'id': 'ann_2',
-      'avatarText': 'SEC',
-      'avatarBg': Color(0xFFE6F7FF),
-      'avatarColor': Color(0xFF096DD9),
-      'author': 'Barangay Security & Tanod Desk',
-      'isVerified': true,
-      'subtitle': 'Chief Officer R. Del Rosario',
-      'time': 'Yesterday',
-      'category': 'Urgent Advisories',
-      'tagText': 'Public Safety Advisory',
-      'tagBg': Color(0xFFE3F2FD),
-      'tagColor': Color(0xFF1565C0),
-      'title': 'Night Curfew Reminders for Minors & Noise Level Ordinance',
-      'content':
-          'Per Municipal Ordinance No. 2023-04, minor curfew begins at 10:00 PM. Street videoke and amplified audio equipment must cease by 10:00 PM to maintain peace in residential corridors.',
-      'likes': 112,
-      'comments': 42,
-    },
-    {
-      'id': 'ann_3',
-      'avatarText': 'ENV',
-      'avatarBg': Color(0xFFE6FFFB),
-      'avatarColor': Color(0xFF08979C),
-      'author': 'Clean & Green Council',
-      'isVerified': false,
-      'subtitle': 'Waste Segregation Committee',
-      'time': '2 days ago',
-      'category': 'Eco & Sanitation',
-      'tagText': 'Eco Program',
-      'tagBg': Color(0xFFE8F5E9),
-      'tagColor': Color(0xFF2E7D32),
-      'title': 'Updated Biodegradable & Recyclable Garbage Hauling Schedule',
-      'content':
-          'Recyclables and dry materials pickup is now Tuesdays and Thursdays. Biodegradable wet waste will remain Mondays, Wednesdays, and Fridays.',
-      'likes': 53,
-      'comments': 8,
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
 
+    final allAnnouncements = appState.announcements.map((ann) => {
+      'id': ann.id ?? 'ann_${ann.hashCode}',
+      'avatarText': 'BRG',
+      'avatarBg': const Color(0xFFD6E4FF),
+      'avatarColor': const Color(0xFF1D39C4),
+      'author': 'Barangay Official',
+      'isVerified': true,
+      'subtitle': ann.zone.isNotEmpty ? ann.zone : 'Barangay Office',
+      'time': '${ann.date.toLocal()}'.split(' ')[0],
+      'category': ann.type,
+      'tagText': ann.priority,
+      'tagBg': const Color(0xFFE3F2FD),
+      'tagColor': const Color(0xFF1565C0),
+      'title': ann.title,
+      'content': ann.content,
+      'likes': 10,
+      'comments': 2,
+    }).toList();
+
     // Filter announcements based on active category
     final filteredAnnouncements = _selectedCategory == 'All Updates'
-        ? _announcements
-        : _announcements.where((a) => a['category'] == _selectedCategory).toList();
+        ? allAnnouncements
+        : allAnnouncements.where((a) => a['category'] == _selectedCategory).toList();
 
     final bool isGuest = appState.currentUser?.role == UserRole.guest;
     if (isGuest) {

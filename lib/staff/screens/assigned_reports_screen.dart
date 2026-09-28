@@ -1,15 +1,44 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app_state.dart';
 import '../../models/report.dart';
 
-class AssignedReportsScreen extends StatelessWidget {
+class AssignedReportsScreen extends StatefulWidget {
   const AssignedReportsScreen({super.key});
+
+  @override
+  State<AssignedReportsScreen> createState() => _AssignedReportsScreenState();
+}
+
+class _AssignedReportsScreenState extends State<AssignedReportsScreen> {
+  int _currentPage = 0;
+  static const int _pageSize = 10;
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final assignedReports = appState.getAssignedReports(appState.currentUser!.id);
+
+    if (assignedReports.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.grey.shade50,
+        appBar: AppBar(
+          title: const Text('Community Inbox', style: TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+        ),
+        body: _buildEmptyState(),
+      );
+    }
+
+    final int totalPages = max(1, (assignedReports.length / _pageSize).ceil());
+    if (_currentPage >= totalPages) {
+      _currentPage = totalPages - 1;
+    }
+
+    final paginatedReports = assignedReports.skip(_currentPage * _pageSize).take(_pageSize).toList();
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -19,16 +48,54 @@ class AssignedReportsScreen extends StatelessWidget {
         foregroundColor: Colors.black,
         elevation: 0,
       ),
-      body: assignedReports.isEmpty
-          ? _buildEmptyState()
-          : ListView.builder(
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: assignedReports.length,
+              itemCount: paginatedReports.length,
               itemBuilder: (context, index) {
-                final report = assignedReports[index];
+                final report = paginatedReports[index];
                 return _buildActionableCard(context, report);
               },
             ),
+          ),
+
+          // Pagination Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Showing ${assignedReports.isEmpty ? 0 : _currentPage * _pageSize + 1}-${min((_currentPage + 1) * _pageSize, assignedReports.length)} of ${assignedReports.length}',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+                      onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
+                    ),
+                    Text(
+                      'Page ${_currentPage + 1} of $totalPages',
+                      style: TextStyle(fontSize: 12, color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                      onPressed: _currentPage < totalPages - 1 ? () => setState(() => _currentPage++) : null,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -131,14 +198,20 @@ class AssignedReportsScreen extends StatelessWidget {
   Widget _getRiskBadge(RiskLevel level) {
     Color color;
     switch (level) {
-      case RiskLevel.low: color = Colors.green; break;
-      case RiskLevel.medium: color = Colors.orange; break;
-      case RiskLevel.high: color = Colors.red; break;
+      case RiskLevel.low:
+        color = Colors.green;
+        break;
+      case RiskLevel.medium:
+        color = Colors.orange;
+        break;
+      case RiskLevel.high:
+        color = Colors.red;
+        break;
     }
     return Container(
       margin: const EdgeInsets.only(left: 8),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
       child: Text(
         '${level.name.toUpperCase()} RISK',
         style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold),
@@ -149,15 +222,27 @@ class AssignedReportsScreen extends StatelessWidget {
   Widget _getStatusBadge(ReportStatus status) {
     Color color;
     switch (status) {
-      case ReportStatus.pending: color = Colors.orange; break;
-      case ReportStatus.assigned: color = Colors.blue; break;
-      case ReportStatus.inProgress: color = Colors.indigo; break;
-      case ReportStatus.resolved: color = Colors.green; break;
-      case ReportStatus.closed: color = Colors.grey; break;
+      case ReportStatus.pending:
+        color = Colors.orange;
+        break;
+      case ReportStatus.underReview:
+      case ReportStatus.underInvestigation:
+      case ReportStatus.actionRequired:
+      case ReportStatus.assigned:
+      case ReportStatus.inProgress:
+        color = Colors.indigo;
+        break;
+      case ReportStatus.resolved:
+        color = Colors.green;
+        break;
+      case ReportStatus.rejected:
+      case ReportStatus.closed:
+        color = Colors.grey;
+        break;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
       child: Text(
         status.name.toUpperCase(),
         style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
@@ -226,12 +311,10 @@ class AssignedReportsScreen extends StatelessWidget {
                 child: Text('Reporter Contact: ${report.contactInfo}', style: const TextStyle(color: Colors.blue, fontSize: 12)),
               ),
             const SizedBox(height: 20),
-            
             _workflowSection(
               title: 'Phase 1: Dispatch Team',
               child: _buildDispatchSelector(context, report),
             ),
-            
             _workflowSection(
               title: 'Phase 2: Action & Remarks',
               child: TextField(
@@ -243,7 +326,6 @@ class AssignedReportsScreen extends StatelessWidget {
                 maxLines: 2,
               ),
             ),
-            
             const SizedBox(height: 20),
             Row(
               children: [
@@ -303,7 +385,7 @@ class AssignedReportsScreen extends StatelessWidget {
 
   Widget _buildDispatchSelector(BuildContext context, Report report) {
     final appState = context.read<AppState>();
-    
+
     final Map<String, List<String>> dispatchOptions = {
       'Waste Management': ['Sanitation Team', 'Maintenance'],
       'Noise Complaint': ['Tanod Patrol', 'Police Assistance'],
@@ -317,18 +399,20 @@ class AssignedReportsScreen extends StatelessWidget {
     final suggestions = dispatchOptions[report.category] ?? dispatchOptions['Others']!;
 
     return Column(
-      children: suggestions.map((team) => ListTile(
-        dense: true,
-        leading: const Icon(Icons.send, color: Colors.blue, size: 20),
-        title: Text(team),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          appState.updateReportStatus(report.id, ReportStatus.assigned);
-          appState.addRemarks(report.id, 'Dispatched: $team');
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Dispatched $team to Purok ${report.purok}')));
-        },
-      )).toList(),
+      children: suggestions
+          .map((team) => ListTile(
+                dense: true,
+                leading: const Icon(Icons.send, color: Colors.blue, size: 20),
+                title: Text(team),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  appState.updateReportStatus(report.id, ReportStatus.assigned);
+                  appState.addRemarks(report.id, 'Dispatched: $team');
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Dispatched $team to Purok ${report.purok}')));
+                },
+              ))
+          .toList(),
     );
   }
 }

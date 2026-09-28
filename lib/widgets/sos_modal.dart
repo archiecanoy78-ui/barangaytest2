@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
 import '../app_state.dart';
 import '../models/report.dart';
+import '../models/user.dart';
 
 void showSOSModal(BuildContext context) {
   String emergencyType = 'Medical';
@@ -49,7 +51,7 @@ void showSOSModal(BuildContext context) {
               ],
             ),
             const SizedBox(height: 8),
-            const Text('Select the reason for your emergency alert.', style: TextStyle(color: Colors.grey)),
+            const Text('Select the reason for your emergency alert. Your location will be shared securely with authorized emergency administrators upon confirmation.', style: TextStyle(color: Colors.grey, fontSize: 12)),
             const SizedBox(height: 20),
             // Reasons Selection
             DropdownButtonFormField<String>(
@@ -97,10 +99,38 @@ void showSOSModal(BuildContext context) {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
-                _confirmSOS(context, () {
+                _confirmSOS(context, () async {
+                  // Request Location Permission & Obtain GPS coordinates
+                  double? lat;
+                  double? lng;
+                  try {
+                    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+                    if (serviceEnabled) {
+                      LocationPermission permission = await Geolocator.checkPermission();
+                      if (permission == LocationPermission.denied) {
+                        permission = await Geolocator.requestPermission();
+                      }
+                      if (permission != LocationPermission.denied && permission != LocationPermission.deniedForever) {
+                        Position position = await Geolocator.getCurrentPosition(
+                          desiredAccuracy: LocationAccuracy.high,
+                          timeLimit: const Duration(seconds: 5),
+                        );
+                        lat = position.latitude;
+                        lng = position.longitude;
+                      }
+                    }
+                  } catch (e) {
+                    debugPrint("Error getting location: $e");
+                  }
+
+                  // Fallback to barangay center if location unavailable
+                  lat ??= 14.1520;
+                  lng ??= 121.2518;
+
                   final appState = context.read<AppState>();
                   final user = appState.currentUser!;
                   
+                  final isGuest = user.role == UserRole.guest;
                   final sosReport = Report(
                     id: 'sos_${DateTime.now().millisecondsSinceEpoch}',
                     title: 'SOS: $emergencyType',
@@ -109,9 +139,15 @@ void showSOSModal(BuildContext context) {
                         ? 'Reason: $emergencyType. Requested: $dispatchNeeded' 
                         : '$emergencyType - ${detailsController.text} (Team: $dispatchNeeded)',
                     purok: user.purok,
+                    complainantName: isGuest ? '' : user.name,
+                    complainantPhone: user.phoneNumber,
                     timestamp: DateTime.now(),
                     reporterId: user.id,
+                    isAnonymous: isGuest,
                     isSOS: true,
+                    status: ReportStatus.pending,
+                    latitude: lat,
+                    longitude: lng,
                   );
                   
                   appState.addReport(sosReport);
@@ -146,16 +182,16 @@ void _confirmSOS(BuildContext context, VoidCallback onConfirm) {
         children: [
           Icon(Icons.report_problem, color: Colors.red),
           SizedBox(width: 10),
-          Text('Are you sure?'),
+          Text('Are you sure you want to report an emergency?'),
         ],
       ),
       content: const Text(
-        'Sending a fake SOS alert is a crime and may result in penalties. Do you really need immediate assistance?',
+        'Sending an emergency alert will capture your current device GPS location and share it securely with authorized barangay emergency administrators. Do you want to report this emergency?',
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
+          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
         ),
         ElevatedButton(
           onPressed: () {
@@ -163,7 +199,7 @@ void _confirmSOS(BuildContext context, VoidCallback onConfirm) {
             onConfirm();
           },
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-          child: const Text('YES, SEND SOS', style: TextStyle(color: Colors.white)),
+          child: const Text('Report Emergency', style: TextStyle(color: Colors.white)),
         ),
       ],
     ),
@@ -174,8 +210,8 @@ void _showSuccessDialog(BuildContext context) {
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('SOS Alert Broadcasted'),
-      content: const Text('The Barangay Staff and Emergency Teams have been notified. Please stay calm and keep your line open.'),
+      title: const Text('Emergency reported successfully'),
+      content: const Text('Your location has been sent to the barangay admin. The Barangay Staff and Emergency Teams have been notified. Please stay calm and keep your line open.'),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),

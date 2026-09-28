@@ -19,7 +19,7 @@ class AnnouncementsList extends StatelessWidget {
               itemBuilder: (context, index) {
                 final ann = announcements[index];
                 return Card(
-                  margin: const EdgeInsets.bottom(16),
+                  margin: const EdgeInsets.only(bottom: 16),
                   elevation: 2,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   child: Padding(

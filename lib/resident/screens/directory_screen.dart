@@ -101,37 +101,6 @@ class DirectoryScreen extends StatelessWidget {
           ),
 
           const SizedBox(height: 24),
-          const Text(
-            'Emergency & Public Hotlines',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          _buildHotlineTile(
-            context,
-            title: 'Barangay Hall Main Desk',
-            number: '0912-345-6789',
-            description: 'General inquiries, complaints, and assistance',
-            icon: Icons.store_mall_directory_rounded,
-            color: Colors.blue,
-          ),
-          _buildHotlineTile(
-            context,
-            title: 'Emergency Response Team (ERT)',
-            number: '0999-888-7777',
-            description: '24/7 First aid, rescue, and evacuation',
-            icon: Icons.emergency_rounded,
-            color: Colors.red,
-          ),
-          _buildHotlineTile(
-            context,
-            title: 'Barangay Health Center',
-            number: '0917-123-4567',
-            description: 'Medical consultations and immunization',
-            icon: Icons.local_hospital_rounded,
-            color: Colors.teal,
-          ),
-
-          const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -202,52 +171,6 @@ class DirectoryScreen extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHotlineTile(BuildContext context, {
-    required String title,
-    required String number,
-    required String description,
-    required IconData icon,
-    required MaterialColor color,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        leading: CircleAvatar(
-          radius: 22,
-          backgroundColor: color.shade50,
-          child: Icon(icon, color: color.shade700, size: 22),
-        ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(number, style: TextStyle(color: color.shade800, fontWeight: FontWeight.w600, fontSize: 13)),
-            Text(description, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-          ],
-        ),
-        trailing: ElevatedButton.icon(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Calling $number ($title)...')),
-            );
-          },
-          icon: const Icon(Icons.phone_rounded, size: 14),
-          label: const Text('Call', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color.shade600,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 0,
-          ),
         ),
       ),
     );

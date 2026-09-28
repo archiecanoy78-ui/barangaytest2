@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../models/report.dart';
 import '../models/user.dart';
+import '../utils_validators.dart';
 
 void showReportForm(BuildContext context, {String initialCategory = 'Waste Management'}) {
   final titleController = TextEditingController();
@@ -17,16 +18,17 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
     builder: (context) => StatefulBuilder(
-      builder: (context, setState) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 20,
-          right: 20,
-          top: 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      builder: (context, setState) => SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Center(
               child: Container(
@@ -50,8 +52,10 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              initialValue: category,
-              items: ['Waste Management', 'Noise Complaint', 'Public Safety', 'Health', 'Infrastructure', 'Others']
+              initialValue: Provider.of<AppState>(context, listen: false).categories.contains(category)
+                  ? category
+                  : Provider.of<AppState>(context, listen: false).categories.first,
+              items: Provider.of<AppState>(context).categories
                   .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                   .toList(),
               onChanged: (val) => category = val!,
@@ -127,6 +131,15 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
                   return;
                 }
 
+                // Validate optional contact info if provided
+                final contactErr = UtilsValidators.validateOptionalContact(contactController.text);
+                if (contactErr != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(contactErr), backgroundColor: Colors.red.shade700),
+                  );
+                  return;
+                }
+
                 setState(() => simulatingChecks = true);
                 await Future.delayed(const Duration(seconds: 2));
 
@@ -134,19 +147,23 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
                 bool isDuplicate = appState.reports.any((r) => r.description == descController.text);
                 bool metadataValid = true; // Simulated
 
+                final isGuest = user.role == UserRole.guest;
                 final report = Report(
                   id: DateTime.now().millisecondsSinceEpoch.toString(),
                   title: titleController.text,
                   category: category,
                   description: descController.text,
-                  purok: user.purok == 'Unknown' ? 'Purok 1' : user.purok, // Default for guest
+                  purok: user.purok == 'Unknown' || user.purok.isEmpty ? 'Purok 1' : user.purok,
                   timestamp: DateTime.now(),
                   reporterId: user.id,
-                  isAnonymous: user.role == UserRole.guest,
+                  complainantName: isGuest ? '' : user.name,
+                  complainantPhone: isGuest ? contactController.text : user.phoneNumber,
+                  complainantEmail: null,
+                  isAnonymous: isGuest,
                   hasMedia: hasMedia,
                   metadataValid: metadataValid,
                   isPotentialDuplicate: isDuplicate,
-                  contactInfo: contactController.text,
+                  contactInfo: isGuest ? contactController.text : user.phoneNumber,
                 );
                 
                 final finalReport = Report(
@@ -157,6 +174,9 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
                   purok: report.purok,
                   timestamp: report.timestamp,
                   reporterId: report.reporterId,
+                  complainantName: report.complainantName,
+                  complainantPhone: report.complainantPhone,
+                  complainantEmail: report.complainantEmail,
                   isAnonymous: report.isAnonymous,
                   hasMedia: report.hasMedia,
                   metadataValid: report.metadataValid,
@@ -188,5 +208,6 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
         ),
       ),
     ),
-  );
+  ),
+);
 }

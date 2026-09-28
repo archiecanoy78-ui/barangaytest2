@@ -1,7 +1,12 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app_state.dart';
 import '../../models/report.dart';
+import '../widgets/portal_theme.dart';
+import '../widgets/page_header.dart';
+import '../widgets/status_badge.dart';
+import '../widgets/needs_attention_strip.dart';
 import 'complaint_details_page.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -12,88 +17,309 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  String _searchQuery = '';
-  String? _selectedCategory;
-  ReportStatus? _selectedStatus;
+  String _getFriendlyRefNo(String id) {
+    final numeric = id.replaceAll(RegExp(r'[^0-9]'), '');
+    final suffix = numeric.length >= 4 ? numeric.substring(numeric.length - 4) : '0012';
+    return 'BRGY-2026-$suffix';
+  }
 
-  void _showNewIncidentDialog() {
+  void _showNewIncidentDialog() async {
     final titleController = TextEditingController();
     final descController = TextEditingController();
     final locationController = TextEditingController();
-    String category = 'Emergency';
+    String category = context.read<AppState>().categories.first;
     String purok = 'Purok 1';
+    String? attachedFileName;
+    String? validationError;
+
+    // Load System Settings from Firestore
+    bool requireEvidence = true;
+    bool autoGenerateId = true;
+    try {
+      final doc = await FirebaseFirestore.instance.collection('settings').doc('barangay_info').get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        requireEvidence = (data['requireEvidence'] as bool?) ?? true;
+        autoGenerateId = (data['autoGenerateId'] as bool?) ?? true;
+      }
+    } catch (_) {}
+
+    final generatedSuffix = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
+    final autoRefId = 'BRGY-${DateTime.now().year}-$generatedSuffix';
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setModalState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('New Incident Report', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (context, setModalState) {
+          Widget buildLabel(String text, {bool isRequired = false}) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Text(
+                    text,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: PortalColors.textDark),
+                  ),
+                  if (isRequired)
+                    const Text(
+                      ' *',
+                      style: TextStyle(color: PortalColors.danger, fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                ],
+              ),
+            );
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            actionsPadding: const EdgeInsets.fromLTRB(24, 12, 24, 20),
+            title: Row(
               children: [
-                TextField(
-                  controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Incident Title', hintText: 'e.g. Flooding near Purok 5'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: category,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: context.read<AppState>().categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                  onChanged: (v) => setModalState(() => category = v!),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: locationController,
-                  decoration: const InputDecoration(labelText: 'Location / Landmark', hintText: 'e.g. Purok 5, Main Road'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: descController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Description', hintText: 'Describe the situation...'),
-                ),
+                const Text('Log New Incident', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                if (autoGenerateId) ...[
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: PortalColors.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: PortalColors.border),
+                    ),
+                    child: Text(
+                      autoRefId,
+                      style: const TextStyle(
+                        color: PortalColors.textMuted,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2563EB),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            content: SizedBox(
+              width: 500,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (validationError != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFF87171)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline_rounded, size: 16, color: PortalColors.danger),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                validationError!,
+                                style: const TextStyle(color: Color(0xFF991B1B), fontSize: 12, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    // Incident Title (Required)
+                    buildLabel('Incident Title', isRequired: true),
+                    TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. Flooding near Purok 5 Main Street',
+                      ),
+                      onChanged: (_) {
+                        if (validationError != null) {
+                          setModalState(() => validationError = null);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Category (Required)
+                    buildLabel('Category', isRequired: true),
+                    DropdownButtonFormField<String>(
+                      value: category,
+                      isExpanded: true,
+                      decoration: const InputDecoration(),
+                      items: context.read<AppState>().categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setModalState(() {
+                            category = v;
+                            if (validationError != null) validationError = null;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Location / Landmark
+                    buildLabel('Location / Landmark'),
+                    TextField(
+                      controller: locationController,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g. Purok 5, Main Road near Chapel',
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Description & Live Character Counter
+                    buildLabel('Description'),
+                    TextField(
+                      controller: descController,
+                      maxLines: 3,
+                      maxLength: 500,
+                      buildCounter: (context, {required currentLength, required isFocused, maxLength}) => null,
+                      decoration: const InputDecoration(
+                        hintText: 'Describe the incident in detail...',
+                        counterText: '',
+                      ),
+                      onChanged: (_) => setModalState(() {}),
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '${descController.text.length} / 500',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: descController.text.length > 500 ? PortalColors.danger : PortalColors.textMuted,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Evidence Upload Field (Respects Require Evidence Attachment)
+                    buildLabel('Attach photo or document evidence', isRequired: requireEvidence),
+                    InkWell(
+                      onTap: () {
+                        setModalState(() {
+                          if (attachedFileName == null) {
+                            attachedFileName = 'incident_photo_${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}.jpg';
+                          } else {
+                            attachedFileName = null;
+                          }
+                          if (validationError != null) validationError = null;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: attachedFileName != null ? PortalColors.primary.withOpacity(0.04) : PortalColors.background,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: attachedFileName != null ? PortalColors.primary : PortalColors.border,
+                            width: 1.5,
+                            style: BorderStyle.solid,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              attachedFileName != null ? Icons.check_circle_rounded : Icons.attach_file_rounded,
+                              size: 18,
+                              color: attachedFileName != null ? PortalColors.success : PortalColors.textMuted,
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                attachedFileName != null ? 'Attached: $attachedFileName (Tap to remove)' : 'Click to attach photo or document evidence',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: attachedFileName != null ? FontWeight.w600 : FontWeight.w500,
+                                  color: attachedFileName != null ? PortalColors.textDark : PortalColors.textMuted,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              onPressed: () async {
-                if (titleController.text.trim().isEmpty) return;
-                final appState = context.read<AppState>();
-                final id = "BR-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
-                final newReport = Report(
-                  id: id,
-                  title: titleController.text.trim(),
-                  category: category,
-                  description: descController.text.trim(),
-                  incidentLocation: locationController.text.trim(),
-                  purok: purok,
-                  complainantName: appState.currentUser?.name ?? 'Admin',
-                  complainantPhone: appState.currentUser?.phoneNumber ?? 'N/A',
-                  status: ReportStatus.pending,
-                  priority: 'High',
-                  timestamp: DateTime.now(),
-                );
-                await appState.submitComplaint(newReport);
-                if (mounted) Navigator.pop(dialogCtx);
-              },
-              child: const Text('Submit Incident'),
             ),
-          ],
-        ),
+            actions: [
+              // Ghost Secondary Button
+              OutlinedButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: PortalColors.textSecondary,
+                  side: const BorderSide(color: PortalColors.border),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                child: const Text('Cancel'),
+              ),
+              const SizedBox(width: 8),
+              // Primary Filled Button
+              ElevatedButton(
+                onPressed: () async {
+                  final titleText = titleController.text.trim();
+                  if (titleText.isEmpty) {
+                    setModalState(() => validationError = 'Incident Title is required.');
+                    return;
+                  }
+                  if (requireEvidence && attachedFileName == null) {
+                    setModalState(() => validationError = 'Evidence attachment is required as per System Settings rules.');
+                    return;
+                  }
+
+                  final appState = context.read<AppState>();
+                  final reportId = autoGenerateId
+                      ? autoRefId
+                      : "BRGY-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
+
+                  final isEmergency = category.toLowerCase().contains('emergency');
+                  final priority = isEmergency ? 'Emergency' : 'Medium';
+
+                  final newReport = Report(
+                    id: reportId,
+                    title: titleText,
+                    category: category,
+                    description: descController.text.trim(),
+                    incidentLocation: locationController.text.trim(),
+                    purok: purok,
+                    complainantName: appState.currentUser?.name ?? 'Admin',
+                    complainantPhone: appState.currentUser?.phoneNumber ?? 'N/A',
+                    status: ReportStatus.pending,
+                    priority: priority,
+                    isSOS: isEmergency,
+                    attachmentUrls: attachedFileName != null ? [attachedFileName!] : [],
+                    timestamp: DateTime.now(),
+                  );
+
+                  await appState.submitComplaint(newReport);
+                  if (mounted) Navigator.pop(dialogCtx);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: PortalColors.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                child: const Text('Save Incident'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -103,584 +329,313 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final appState = context.watch<AppState>();
     final reports = appState.reports;
 
-    // Dynamics calculations from Firebase
-    final totalReports = reports.length;
-    final verifiedCount = reports.where((r) => r.confirmations.isNotEmpty || r.status == ReportStatus.resolved || r.status == ReportStatus.underReview).length;
-    final pendingCount = reports.where((r) => r.status == ReportStatus.pending).length;
+    // Attention Metrics
+    final unassigned = reports.where((r) => r.assignedToId == null && r.status == ReportStatus.pending).length;
+    final pendingOver3Days = reports.where((r) => r.status == ReportStatus.pending && DateTime.now().difference(r.timestamp).inDays >= 3).length;
+    final urgentCount = reports.where((r) => r.priority.toLowerCase() == 'high' || r.isSOS).length;
+    final resolvedThisWeek = reports.where((r) => r.status == ReportStatus.resolved && DateTime.now().difference(r.timestamp).inDays <= 7).length;
 
-    final assignedCount = reports.where((r) => r.assignedToId != null || r.status == ReportStatus.assigned).length;
-    final inProgressCount = reports.where((r) => r.status == ReportStatus.inProgress).length;
-    final investigatingCount = reports.where((r) => r.status == ReportStatus.underInvestigation || r.status == ReportStatus.underReview).length;
+    final totalIncidents = reports.length;
+    final assignedCount = reports.where((r) => r.assignedToId != null && r.assignedToId!.isNotEmpty).length;
+    final inProgressCount = reports.where((r) => r.status == ReportStatus.inProgress || r.status == ReportStatus.underInvestigation || r.status == ReportStatus.underReview).length;
     final closedResolvedCount = reports.where((r) => r.status == ReportStatus.resolved || r.status == ReportStatus.closed).length;
 
-    // Filter reports for Complaint Management section
-    final filteredReports = reports.where((r) {
-      final query = _searchQuery.toLowerCase();
-      final matchesQuery = _searchQuery.isEmpty ||
-          r.id.toLowerCase().contains(query) ||
-          r.complainantName.toLowerCase().contains(query) ||
-          r.title.toLowerCase().contains(query) ||
-          r.description.toLowerCase().contains(query);
+    // Purok Breakdown (Normalized and Sorted highest to lowest)
+    final Map<String, int> pCounts = {};
+    for (var r in reports) {
+      String p = r.purok.trim();
+      if (p.isEmpty) {
+        p = 'Purok 1';
+      } else {
+        p = p[0].toUpperCase() + p.substring(1).toLowerCase();
+      }
+      pCounts[p] = (pCounts[p] ?? 0) + 1;
+    }
+    final sortedPuroks = pCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
 
-      final matchesCategory = _selectedCategory == null || r.category == _selectedCategory;
-      final matchesStatus = _selectedStatus == null || r.status == _selectedStatus;
+    // Recent 5 complaints
+    final recentReports = reports.take(5).toList();
 
-      return matchesQuery && matchesCategory && matchesStatus;
-    }).toList();
+    final volumeSeries = _buildVolumeSeries(reports);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(28.0),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        PageHeader(
+          title: "Today's Summary",
+          description: 'Overview of active resident complaints, purok distribution, and urgent matters.',
+          breadcrumbs: const ['Dashboard', 'Overview'],
+          actionButton: ElevatedButton.icon(
+            onPressed: _showNewIncidentDialog,
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Log Incident'),
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(28),
+            children: [
+              Row(
+                children: [
+                  _buildMetricCard('Total Incidents', '$totalIncidents', '2.4%', Icons.assignment_outlined, const [Color(0xFF6366F1), Color(0xFF8B5CF6)], true),
+                  const SizedBox(width: 16),
+                  _buildMetricCard('Assigned', '$assignedCount', '+8 today', Icons.person_outline_rounded, const [Color(0xFF14B8A6), Color(0xFF2DD4BF)], true),
+                  const SizedBox(width: 16),
+                  _buildMetricCard('In Progress / Investigating', '$inProgressCount', '+3 today', Icons.hourglass_top_rounded, const [Color(0xFFF59E0B), Color(0xFFFBBF24)], false),
+                  const SizedBox(width: 16),
+                  _buildMetricCard('Closed / Resolved', '$closedResolvedCount', '+12 this week', Icons.check_circle_outline_rounded, const [Color(0xFF22C55E), Color(0xFF4ADE80)], true),
+                ],
+              ),
+              const SizedBox(height: 24),
+              NeedsAttentionStrip(
+                items: [
+                  NeedsAttentionItem(label: 'Unassigned', count: unassigned, color: PortalColors.warning, onTap: () {}),
+                  NeedsAttentionItem(label: 'Pending > 3 Days', count: pendingOver3Days, color: PortalColors.danger, onTap: () {}),
+                  NeedsAttentionItem(label: 'Urgent / High Priority', count: urgentCount, color: PortalColors.danger, onTap: () {}),
+                  NeedsAttentionItem(label: 'Resolved This Week', count: resolvedThisWeek, color: PortalColors.success, onTap: () {}),
+                ],
+              ),
+              const SizedBox(height: 28),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: PortalColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: PortalColors.border),
+                        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 14, offset: Offset(0, 2))],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Recent Complaints', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: PortalColors.textDark)),
+                                TextButton(onPressed: () {}, child: const Text('View all', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: PortalColors.primary))),
+                              ],
+                            ),
+                          ),
+                          const Divider(height: 1, color: PortalColors.border),
+                          recentReports.isEmpty
+                              ? const Padding(padding: EdgeInsets.all(40), child: Center(child: Text('No complaints recorded.', style: TextStyle(color: PortalColors.textMuted))))
+                              : ListView.separated(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: recentReports.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1, color: PortalColors.border),
+                                  itemBuilder: (context, index) {
+                                    final r = recentReports[index];
+                                    final isEmergency = r.category.toLowerCase().contains('emergency') || r.isSOS;
+
+                                    return ListTile(
+                                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ComplaintDetailsPage(report: r))),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                      title: Row(
+                                        children: [
+                                          Text(_getFriendlyRefNo(r.id), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, fontFamily: 'monospace', color: PortalColors.primary)),
+                                          const SizedBox(width: 8),
+                                          Expanded(child: Text(r.title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: PortalColors.textPrimary), overflow: TextOverflow.ellipsis)),
+                                        ],
+                                      ),
+                                      subtitle: Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Row(
+                                          children: [
+                                            if (isEmergency)
+                                              Container(width: 6, height: 6, margin: const EdgeInsets.only(right: 6), decoration: const BoxDecoration(color: PortalColors.danger, shape: BoxShape.circle)),
+                                            Text('${r.category} • ${r.purok.isNotEmpty ? r.purok : 'Purok 1'}', style: const TextStyle(color: PortalColors.textMuted, fontSize: 11)),
+                                          ],
+                                        ),
+                                      ),
+                                      trailing: StatusBadge(status: r.status),
+                                    );
+                                  },
+                                ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: PortalColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: PortalColors.border),
+                        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 14, offset: Offset(0, 2))],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Complaints by Purok', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: PortalColors.textDark)),
+                          const SizedBox(height: 4),
+                          const Text('Active distribution across puroks', style: TextStyle(fontSize: 12, color: PortalColors.textMuted)),
+                          const SizedBox(height: 20),
+                          sortedPuroks.isEmpty
+                              ? const Center(child: Text('No data available', style: TextStyle(color: PortalColors.textMuted)))
+                              : Column(
+                                  children: sortedPuroks.map((entry) {
+                                    final maxCount = sortedPuroks.first.value;
+                                    final pct = maxCount > 0 ? entry.value / maxCount : 0.0;
+                                    final percent = (pct * 100).round();
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 14),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: PortalColors.textPrimary)),
+                                              Text('$percent%', style: const TextStyle(color: PortalColors.textMuted, fontSize: 12, fontWeight: FontWeight.w700)),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(999),
+                                            child: AnimatedContainer(
+                                              duration: const Duration(milliseconds: 500),
+                                              curve: Curves.easeOutCubic,
+                                              width: double.infinity,
+                                              height: 10,
+                                              decoration: BoxDecoration(color: const Color(0xFFE8EBF3), borderRadius: BorderRadius.circular(999)),
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: FractionallySizedBox(
+                                                  widthFactor: pct.clamp(0.08, 1.0),
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)], begin: Alignment.centerLeft, end: Alignment.centerRight),
+                                                      borderRadius: BorderRadius.circular(999),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 28),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: PortalColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: PortalColors.border),
+                  boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 14, offset: Offset(0, 2))],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Trends Over Time', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: PortalColors.textDark)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(color: const Color(0xFFEEF2FF), borderRadius: BorderRadius.circular(999)),
+                          child: const Text('Last 30 days', style: TextStyle(color: PortalColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 180,
+                      child: CustomPaint(
+                        painter: _TrendAreaPainter(volumeSeries),
+                        child: Container(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<_TrendPoint> _buildVolumeSeries(List<Report> reports) {
+    final now = DateTime.now();
+    final values = <_TrendPoint>[];
+
+    for (int i = 29; i >= 0; i--) {
+      final date = now.subtract(Duration(days: i));
+      final count = reports.where((r) => r.timestamp.year == date.year && r.timestamp.month == date.month && r.timestamp.day == date.day).length;
+      values.add(_TrendPoint(date, count));
+    }
+
+    return values;
+  }
+
+  Widget _buildMetricCard(String title, String value, String delta, IconData icon, List<Color> colors, bool positive) {
+    final glow = positive ? const Color(0xFFDCFCE7) : const Color(0xFFFFF7ED);
+    final deltaColor = positive ? const Color(0xFF15803D) : const Color(0xFFB45309);
+
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: PortalColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: PortalColors.border),
+          boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, 2))],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Page Title Header Bar
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'Admin Dashboard',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Welcome back, Administrator. Here is the operational overview of Barangay operations.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 18),
                 ),
-                Row(
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.upload_outlined, size: 18, color: Color(0xFF334155)),
-                      label: const Text('Export Report', style: TextStyle(color: Color(0xFF334155), fontWeight: FontWeight.w600)),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFFCBD5E1)),
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: _showNewIncidentDialog,
-                      icon: const Icon(Icons.add, size: 20, color: Colors.white),
-                      label: const Text('+ New Incident', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        elevation: 0,
-                      ),
-                    ),
-                  ],
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(color: glow, borderRadius: BorderRadius.circular(999)),
+                  child: Text(
+                    delta,
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: deltaColor),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-
-            // Banner Card: Total Incidents Logged
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            const SizedBox(height: 18),
+            Text(value, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: PortalColors.textDark, letterSpacing: -0.8)),
+            const SizedBox(height: 10),
+            Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: PortalColors.textMuted)),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 26,
+              child: CustomPaint(
+                painter: _MiniSparklinePainter(
+                  values: List.generate(8, (index) => (index + 1) * (index.isEven ? 0.8 : 1.2) + (positive ? 0.2 : 0.0)),
+                  color: colors.first,
                 ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x1F2563EB),
-                    blurRadius: 20,
-                    offset: Offset(0, 8),
-                  )
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF60A5FA),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'E-REPORTYAN ADMIN SYSTEM',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFFBFDBFE),
-                                letterSpacing: 1.0,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Total Incidents Logged',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              '$totalReports',
-                              style: const TextStyle(
-                                fontSize: 52,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                                height: 1.0,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.trending_up_rounded, color: Color(0xFF34D399), size: 16),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    '+12% this week',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Inset Verification Counts Box
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
-                    ),
-                    child: Row(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'VERIFIED',
-                              style: TextStyle(
-                                color: Color(0xFFBFDBFE),
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '$verifiedCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 32,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 32),
-                        Container(
-                          width: 1,
-                          height: 40,
-                          color: Colors.white.withOpacity(0.25),
-                        ),
-                        const SizedBox(width: 32),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'PENDING',
-                              style: TextStyle(
-                                color: Color(0xFFBFDBFE),
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.8,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '$pendingCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 32,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Operational Overview Title
-            const Text(
-              'Operational Overview',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 4 Metric Overview Cards
-            LayoutBuilder(
-              builder: (context, constraints) {
-                double cardWidth = (constraints.maxWidth - 48) / 4;
-                if (cardWidth < 220) cardWidth = constraints.maxWidth;
-
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: [
-                    _buildOverviewCard(
-                      title: 'Assigned',
-                      value: assignedCount,
-                      badgeText: 'Active',
-                      badgeSubtext: 'staff handling cases',
-                      badgeColor: const Color(0xFF10B981),
-                      icon: Icons.assignment_outlined,
-                      iconBg: const Color(0xFFEFF6FF),
-                      iconColor: const Color(0xFF2563EB),
-                      width: cardWidth,
-                    ),
-                    _buildOverviewCard(
-                      title: 'In Progress',
-                      value: inProgressCount,
-                      badgeText: 'Under',
-                      badgeSubtext: 'field investigation',
-                      badgeColor: const Color(0xFFD97706),
-                      icon: Icons.schedule_rounded,
-                      iconBg: const Color(0xFFFFF7ED),
-                      iconColor: const Color(0xFFD97706),
-                      width: cardWidth,
-                    ),
-                    _buildOverviewCard(
-                      title: 'Investigating',
-                      value: investigatingCount,
-                      badgeText: 'Reviewing',
-                      badgeSubtext: 'evidence',
-                      badgeColor: const Color(0xFF7C3AED),
-                      icon: Icons.search_rounded,
-                      iconBg: const Color(0xFFF5F3FF),
-                      iconColor: const Color(0xFF7C3AED),
-                      width: cardWidth,
-                    ),
-                    _buildOverviewCard(
-                      title: 'Closed / Resolved',
-                      value: closedResolvedCount,
-                      badgeText: 'Completed',
-                      badgeSubtext: 'cases this cycle',
-                      badgeColor: const Color(0xFF10B981),
-                      icon: Icons.check_rounded,
-                      iconBg: const Color(0xFFECFDF5),
-                      iconColor: const Color(0xFF10B981),
-                      width: cardWidth,
-                    ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 32),
-
-            // Complaint Management Table Card
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x05000000),
-                    blurRadius: 16,
-                    offset: Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Section Header & Filters
-                  Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: const [
-                                Text(
-                                  'Complaint Management',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF0F172A),
-                                  ),
-                                ),
-                                SizedBox(height: 4),
-                                Text(
-                                  'Review and filter active community reports and resolution statuses.',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF64748B),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: TextField(
-                                decoration: InputDecoration(
-                                  hintText: 'Search ID, name, description...',
-                                  prefixIcon: const Icon(Icons.search, color: Color(0xFF64748B), size: 20),
-                                  filled: true,
-                                  fillColor: const Color(0xFFF8FAFC),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                                  ),
-                                ),
-                                onChanged: (val) => setState(() => _searchQuery = val),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              flex: 2,
-                              child: DropdownButtonFormField<String>(
-                                value: _selectedCategory,
-                                decoration: InputDecoration(
-                                  hintText: 'All Categories',
-                                  filled: true,
-                                  fillColor: const Color(0xFFF8FAFC),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                                  ),
-                                ),
-                                items: [
-                                  const DropdownMenuItem<String>(value: null, child: Text('All Categories')),
-                                  ...appState.categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))),
-                                ],
-                                onChanged: (val) => setState(() => _selectedCategory = val),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              flex: 2,
-                              child: DropdownButtonFormField<ReportStatus>(
-                                value: _selectedStatus,
-                                decoration: InputDecoration(
-                                  hintText: 'All Status',
-                                  filled: true,
-                                  fillColor: const Color(0xFFF8FAFC),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                                  ),
-                                ),
-                                items: [
-                                  const DropdownMenuItem<ReportStatus>(value: null, child: Text('All Status')),
-                                  ...ReportStatus.values.map((st) => DropdownMenuItem(value: st, child: Text(_formatStatus(st)))),
-                                ],
-                                onChanged: (val) => setState(() => _selectedStatus = val),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            TextButton(
-                              onPressed: () {
-                                setState(() {
-                                  _searchQuery = '';
-                                  _selectedCategory = null;
-                                  _selectedStatus = null;
-                                });
-                              },
-                              child: const Text(
-                                'Reset Filters',
-                                style: TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
-
-                  // Complaints Data Table
-                  filteredReports.isEmpty
-                      ? Container(
-                          padding: const EdgeInsets.all(48),
-                          alignment: Alignment.center,
-                          child: const Column(
-                            children: [
-                              Icon(Icons.inbox_outlined, size: 48, color: Color(0xFF94A3B8)),
-                              SizedBox(height: 12),
-                              Text(
-                                'No complaints match the filter criteria.',
-                                style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                        )
-                      : SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width - 360),
-                            child: DataTable(
-                              headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
-                              headingRowHeight: 48,
-                              dataRowMaxHeight: 64,
-                              horizontalMargin: 24,
-                              columns: const [
-                                DataColumn(label: Text('ID', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 11))),
-                                DataColumn(label: Text('COMPLAINANT', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 11))),
-                                DataColumn(label: Text('CATEGORY', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 11))),
-                                DataColumn(label: Text('LOCATION', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 11))),
-                                DataColumn(label: Text('DATE', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 11))),
-                                DataColumn(label: Text('STATUS', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 11))),
-                                DataColumn(label: Text('ACTION', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B), fontSize: 11))),
-                              ],
-                              rows: filteredReports.map((report) {
-                                final isAnon = report.isAnonymous || report.complainantName.isEmpty;
-                                return DataRow(
-                                  cells: [
-                                    DataCell(
-                                      InkWell(
-                                        onTap: () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (_) => ComplaintDetailsPage(report: report)),
-                                        ),
-                                        child: Text(
-                                          report.id,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF2563EB),
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        isAnon ? 'Anonymous' : report.complainantName,
-                                        style: TextStyle(
-                                          fontWeight: isAnon ? FontWeight.normal : FontWeight.w600,
-                                          fontStyle: isAnon ? FontStyle.italic : FontStyle.normal,
-                                          color: isAnon ? const Color(0xFF94A3B8) : const Color(0xFF0F172A),
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        report.category,
-                                        style: const TextStyle(color: Color(0xFF334155), fontSize: 13),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        report.purok.isNotEmpty
-                                            ? report.purok
-                                            : (report.incidentLocation.isNotEmpty ? report.incidentLocation : 'Not specified'),
-                                        style: TextStyle(
-                                          color: (report.purok.isEmpty && report.incidentLocation.isEmpty)
-                                              ? const Color(0xFF94A3B8)
-                                              : const Color(0xFF334155),
-                                          fontStyle: (report.purok.isEmpty && report.incidentLocation.isEmpty)
-                                              ? FontStyle.italic
-                                              : FontStyle.normal,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        _formatDate(report.timestamp),
-                                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                                      ),
-                                    ),
-                                    DataCell(_buildStatusBadge(report.status)),
-                                    DataCell(
-                                      TextButton(
-                                        onPressed: () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (_) => ComplaintDetailsPage(report: report)),
-                                        ),
-                                        child: const Text(
-                                          'View',
-                                          style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2563EB), fontSize: 13),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                ],
               ),
             ),
           ],
@@ -688,179 +643,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+}
 
-  Widget _buildOverviewCard({
-    required String title,
-    required int value,
-    required String badgeText,
-    required String badgeSubtext,
-    required Color badgeColor,
-    required IconData icon,
-    required Color iconBg,
-    required Color iconColor,
-    required double width,
-  }) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x05000000),
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF64748B),
-                ),
-              ),
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '$value',
-            style: const TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF0F172A),
-              height: 1.0,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Text(
-                badgeText,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: badgeColor,
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  badgeSubtext,
-                  style: const TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 12,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+class _TrendPoint {
+  final DateTime date;
+  final int count;
 
-  Widget _buildStatusBadge(ReportStatus status) {
-    Color color;
-    Color bg;
-    String label = _formatStatus(status);
+  const _TrendPoint(this.date, this.count);
+}
 
-    switch (status) {
-      case ReportStatus.pending:
-        color = const Color(0xFFD97706);
-        bg = const Color(0xFFFEF3C7);
-        break;
-      case ReportStatus.underReview:
-      case ReportStatus.underInvestigation:
-        color = const Color(0xFF7C3AED);
-        bg = const Color(0xFFF3E8FF);
-        break;
-      case ReportStatus.assigned:
-      case ReportStatus.inProgress:
-        color = const Color(0xFF2563EB);
-        bg = const Color(0xFFEFF6FF);
-        break;
-      case ReportStatus.resolved:
-        color = const Color(0xFF10B981);
-        bg = const Color(0xFFD1FAE5);
-        break;
-      case ReportStatus.closed:
-        color = const Color(0xFF64748B);
-        bg = const Color(0xFFF1F5F9);
-        break;
-      case ReportStatus.rejected:
-        color = const Color(0xFFEF4444);
-        bg = const Color(0xFFFEE2E2);
-        break;
-      default:
-        color = const Color(0xFF64748B);
-        bg = const Color(0xFFF1F5F9);
-        break;
+class _MiniSparklinePainter extends CustomPainter {
+  final List<double> values;
+  final Color color;
+
+  const _MiniSparklinePainter({required this.values, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path();
+    final max = values.reduce((a, b) => a > b ? a : b).clamp(0.1, double.infinity);
+    final min = values.reduce((a, b) => a < b ? a : b);
+    final span = (max - min).abs() < 0.0001 ? 1.0 : max - min;
+
+    for (int i = 0; i < values.length; i++) {
+      final x = i / (values.length - 1) * size.width;
+      final y = size.height - ((values[i] - min) / span) * (size.height - 4) - 2;
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
+    final linePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(path, linePaint);
   }
 
-  String _formatStatus(ReportStatus status) {
-    switch (status) {
-      case ReportStatus.pending:
-        return 'Pending';
-      case ReportStatus.underReview:
-        return 'Under Review';
-      case ReportStatus.underInvestigation:
-        return 'Investigating';
-      case ReportStatus.assigned:
-        return 'Assigned';
-      case ReportStatus.inProgress:
-        return 'In Progress';
-      case ReportStatus.resolved:
-        return 'Resolved';
-      case ReportStatus.closed:
-        return 'closed';
-      case ReportStatus.rejected:
-        return 'Rejected';
-      default:
-        return status.name;
+  @override
+  bool shouldRepaint(covariant _MiniSparklinePainter oldDelegate) => oldDelegate.values != values || oldDelegate.color != color;
+}
+
+class _TrendAreaPainter extends CustomPainter {
+  final List<_TrendPoint> points;
+
+  const _TrendAreaPainter(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+
+    final max = points.map((p) => p.count.toDouble()).reduce((a, b) => a > b ? a : b);
+    final min = 0.0;
+    final gridPaint = Paint()..color = const Color(0xFFE5E7EB)..strokeWidth = 1;
+    for (int i = 0; i <= 4; i++) {
+      final y = size.height * (i / 4);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
+
+    final linePath = Path();
+    final areaPath = Path();
+    final step = points.length > 1 ? size.width / (points.length - 1) : size.width;
+    final denominator = (max - min).abs() < 0.0001 ? 1.0 : max - min;
+
+    for (int i = 0; i < points.length; i++) {
+      final x = i * step;
+      final ratio = (points[i].count - min) / denominator;
+      final y = size.height - ratio * (size.height - 22) - 10;
+      if (i == 0) {
+        linePath.moveTo(x, y);
+        areaPath.moveTo(x, y);
+      } else {
+        linePath.lineTo(x, y);
+        areaPath.lineTo(x, y);
+      }
+    }
+
+    areaPath.lineTo(size.width, size.height);
+    areaPath.lineTo(0, size.height);
+    areaPath.close();
+
+    final areaPaint = Paint()..shader = const LinearGradient(
+      colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+    ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(areaPath, areaPaint..color = const Color(0x1A6366F1));
+
+    final linePaint = Paint()
+      ..color = const Color(0xFF6366F1)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(linePath, linePaint);
+
+    final dotPaint = Paint()..color = Colors.white..style = PaintingStyle.fill;
+    final outerPaint = Paint()..color = const Color(0xFF6366F1)..style = PaintingStyle.fill;
+    final lastPoint = points.last;
+    final lastRatio = (lastPoint.count - min) / ((max - min).abs() < 0.0001 ? 1.0 : max - min);
+    final lastX = size.width;
+    final lastY = size.height - lastRatio * (size.height - 22) - 10;
+    canvas.drawCircle(Offset(lastX, lastY), 5, outerPaint);
+    canvas.drawCircle(Offset(lastX, lastY), 2.5, dotPaint);
   }
 
-  String _formatDate(DateTime dt) {
-    final year = dt.year;
-    final month = dt.month.toString().padLeft(2, '0');
-    final day = dt.day.toString().padLeft(2, '0');
-    return '$year-$month-$day';
-  }
+  @override
+  bool shouldRepaint(covariant _TrendAreaPainter oldDelegate) => oldDelegate.points != points;
 }

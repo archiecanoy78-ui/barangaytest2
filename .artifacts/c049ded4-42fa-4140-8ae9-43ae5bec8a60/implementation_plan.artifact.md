@@ -1,56 +1,43 @@
-# Implementation Plan - Firestore Integration
+# Implementation Plan - Navigation Refactor & Announcement Posting
 
-The user reported that Firestore data is not reflecting in the application. Research revealed that while Firebase is initialized, the `cloud_firestore` dependency is missing from `pubspec.yaml`, and `AppState.dart` uses local memory lists instead of Firestore for data persistence.
+This plan addresses the following requirements:
+1.  Enable announcement posting for the Staff role.
+2.  Remove the "Reports" tab from the Barangay Admin/Captain account and replace it with a "Directory" tab.
+3.  Ensure the Directory allows officials to edit resident information.
+4.  Remove the "Users" tab from the Staff account (already hidden, but we will ensure clean logic).
 
 ## User Review Required
 
 > [!IMPORTANT]
-> This change will shift the app from local memory storage to Firebase Firestore. Existing local data (hardcoded in `AppState`) will be used to populate Firestore initially if needed, but going forward, all CRUD operations will hit the live database.
+> - **Admin Reports**: Per your request, the **Reports** tab will be **removed** for the Admin/Captain account. They will focus on the **Directory** and high-level dashboard metrics instead.
+> - **Consolidated Directory**: The existing "User Management" screen will be renamed and repurposed as the **Directory**, serving as the central hub for managing residents and staff.
 
 ## Proposed Changes
 
-### Dependencies
+### Staff Module
 
-#### [MODIFY] [pubspec.yaml](file:///C:/Users/Archie%20J.%20Canoy/Downloads/barangaytest/pubspec.yaml)
-- Add `cloud_firestore: ^5.4.4` to the dependencies section.
+#### [MODIFY] [staff_main.dart](file:///C:/Users/Archie%20J.%20Canoy/Downloads/barangaytest/lib/staff/staff_main.dart)
+- Update the `screens` and `navItems` logic:
+    - **Barangay Staff**: Dash, Reports, Inbox, Map.
+    - **Barangay Admin**: Dash, Directory (using `ManagementScreen`), Inbox, Map.
+- Ensure only 4 tabs are shown for both roles to maintain a clean layout.
 
-### Data Models
+#### [MODIFY] [dashboard_screen.dart](file:///C:/Users/Archie%20J.%20Canoy/Downloads/barangaytest/lib/staff/screens/dashboard_screen.dart)
+- Add a **"Quick Actions"** section at the bottom of the dashboard.
+- Include a **"Post Announcement"** button that opens the announcement creation modal.
+- This will be available for all official roles (Staff and Admin).
 
-#### [MODIFY] [user.dart](file:///C:/Users/Archie%20J.%20Canoy/Downloads/barangaytest/lib/models/user.dart)
-- Add `toMap()` and `fromMap()` methods.
-
-#### [MODIFY] [report.dart](file:///C:/Users/Archie%20J.%20Canoy/Downloads/barangaytest/lib/models/report.dart)
-- Add `toMap()` and `fromMap()` methods.
-
-#### [MODIFY] [message.dart](file:///C:/Users/Archie%20J.%20Canoy/Downloads/barangaytest/lib/models/message.dart)
-- Add `toMap()` and `fromMap()` methods.
-
-#### [MODIFY] [announcement.dart](file:///C:/Users/Archie%20J.%20Canoy/Downloads/barangaytest/lib/models/announcement.dart)
-- Add `toMap()` and `fromMap()` methods.
-
-### State Management
-
-#### [MODIFY] [app_state.dart](file:///C:/Users/Archie%20J.%20Canoy/Downloads/barangaytest/lib/app_state.dart)
-- Import `cloud_firestore`.
-- Initialize `FirebaseFirestore` instance.
-- Update constructor to fetch initial data from Firestore or set up real-time listeners.
-- Update methods to perform Firestore operations:
-    - `registerResident`: Add to `users` collection.
-    - `addReport`: Add to `reports` collection.
-    - `updateReportStatus`, `assignReport`, `addRemarks`: Update document in `reports` collection.
-    - `addAnnouncement`: Add to `announcements` collection.
-    - `sendMessage`: Add to `messages` collection.
-    - `verifyResident`, `updateUser`, `archiveUser`, `restoreUser`: Update document in `users` collection.
+#### [MODIFY] [management_screen.dart](file:///C:/Users/Archie%20J.%20Canoy/Downloads/barangaytest/lib/staff/screens/management_screen.dart)
+- Rename the screen title to **"Directory"**.
+- Ensure editing capabilities are prominent for Admin/Official users.
 
 ## Verification Plan
 
-### Automated Tests
-- I will verify the code compiles successfully after adding the dependency.
-- I will check for any syntax errors in the new Firestore logic.
-
 ### Manual Verification
-- The user should run the app and verify that:
-    1. Registering a resident creates a document in Firestore.
-    2. Filing a report appears in Firestore.
-    3. Changes to report status are reflected in Firestore.
-    4. Announcements and messages are persisted.
+1.  **Staff Login**:
+    - Verify tabs are: Dash, Reports, Inbox, Map.
+    - Verify "Post Announcement" is available on the Dashboard.
+2.  **Admin Login**:
+    - Verify tabs are: Dash, Directory, Inbox, Map.
+    - Verify "Reports" is missing.
+    - Verify "Directory" allows editing resident data.

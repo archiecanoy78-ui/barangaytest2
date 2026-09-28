@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app_state.dart';
@@ -19,7 +20,7 @@ class ReportsScreen extends StatelessWidget {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('E-Reportyan'),
+          title: const Text('E-Reportyan', style: TextStyle(fontWeight: FontWeight.bold)),
           elevation: 0,
           bottom: const TabBar(
             tabs: [
@@ -30,8 +31,8 @@ class ReportsScreen extends StatelessWidget {
         ),
         body: TabBarView(
           children: [
-            _buildReportList(context, myReports, true),
-            _buildReportList(context, communityReports, false),
+            PaginatedReportList(reports: myReports, isMyTab: true),
+            PaginatedReportList(reports: communityReports, isMyTab: false),
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
@@ -46,18 +47,86 @@ class ReportsScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildReportList(BuildContext context, List<Report> reports, bool isMyTab) {
-    if (reports.isEmpty) {
-      return _buildEmptyState(isMyTab ? 'No reports yet' : 'No community reports');
+class PaginatedReportList extends StatefulWidget {
+  final List<Report> reports;
+  final bool isMyTab;
+
+  const PaginatedReportList({
+    super.key,
+    required this.reports,
+    required this.isMyTab,
+  });
+
+  @override
+  State<PaginatedReportList> createState() => _PaginatedReportListState();
+}
+
+class _PaginatedReportListState extends State<PaginatedReportList> {
+  int _currentPage = 0;
+  static const int _pageSize = 10;
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.reports.isEmpty) {
+      return _buildEmptyState(widget.isMyTab ? 'No reports yet' : 'No community reports');
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: reports.length,
-      itemBuilder: (context, index) {
-        final report = reports[index];
-        return _buildReportCard(context, report, isMyTab);
-      },
+
+    final int totalPages = max(1, (widget.reports.length / _pageSize).ceil());
+    if (_currentPage >= totalPages) {
+      _currentPage = totalPages - 1;
+    }
+
+    final paginatedReports = widget.reports.skip(_currentPage * _pageSize).take(_pageSize).toList();
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: paginatedReports.length,
+            itemBuilder: (context, index) {
+              final report = paginatedReports[index];
+              return _buildReportCard(context, report, widget.isMyTab);
+            },
+          ),
+        ),
+
+        // Pagination Bar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Colors.grey.shade200)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Showing ${widget.reports.isEmpty ? 0 : _currentPage * _pageSize + 1}-${min((_currentPage + 1) * _pageSize, widget.reports.length)} of ${widget.reports.length}',
+                style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_rounded, size: 16),
+                    onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
+                  ),
+                  Text(
+                    'Page ${_currentPage + 1} of $totalPages',
+                    style: TextStyle(fontSize: 12, color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                    onPressed: _currentPage < totalPages - 1 ? () => setState(() => _currentPage++) : null,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -175,22 +244,42 @@ class ReportsScreen extends StatelessWidget {
     IconData icon;
     Color color = _getStatusColor(status);
     switch (status) {
-      case ReportStatus.pending: icon = Icons.hourglass_empty; break;
-      case ReportStatus.assigned: icon = Icons.person_search; break;
-      case ReportStatus.inProgress: icon = Icons.engineering; break;
-      case ReportStatus.resolved: icon = Icons.check_circle_outline; break;
-      case ReportStatus.closed: icon = Icons.archive_outlined; break;
+      case ReportStatus.pending:
+        icon = Icons.hourglass_empty;
+        break;
+      case ReportStatus.underReview:
+      case ReportStatus.underInvestigation:
+      case ReportStatus.actionRequired:
+      case ReportStatus.assigned:
+      case ReportStatus.inProgress:
+        icon = Icons.engineering;
+        break;
+      case ReportStatus.resolved:
+        icon = Icons.check_circle_outline;
+        break;
+      case ReportStatus.rejected:
+      case ReportStatus.closed:
+        icon = Icons.archive_outlined;
+        break;
     }
     return Icon(icon, color: color);
   }
 
   Color _getStatusColor(ReportStatus status) {
     switch (status) {
-      case ReportStatus.pending: return Colors.orange;
-      case ReportStatus.assigned: return Colors.blue;
-      case ReportStatus.inProgress: return Colors.indigo;
-      case ReportStatus.resolved: return Colors.green;
-      case ReportStatus.closed: return Colors.grey;
+      case ReportStatus.pending:
+        return Colors.orange;
+      case ReportStatus.underReview:
+      case ReportStatus.underInvestigation:
+      case ReportStatus.actionRequired:
+      case ReportStatus.assigned:
+      case ReportStatus.inProgress:
+        return Colors.indigo;
+      case ReportStatus.resolved:
+        return Colors.green;
+      case ReportStatus.rejected:
+      case ReportStatus.closed:
+        return Colors.grey;
     }
   }
 }
