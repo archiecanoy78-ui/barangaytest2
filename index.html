@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Putho-Tuntungin Barangay Boundary</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""
+    />
+    <style>
+      :root {
+        --panel-bg: rgba(12, 17, 22, 0.85);
+        --panel-border: rgba(255, 255, 255, 0.18);
+        --primary: #e53935;
+        --white: #ffffff;
+        --text: #f5f7fa;
+        --shadow: 0 10px 24px rgba(0, 0, 0, 0.26);
+      }
+
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #111827;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      #app {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      #map {
+        width: 100%;
+        height: 100%;
+      }
+
+      .toolbar {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .toolbar button,
+      .toolbar select {
+        border: 1px solid var(--panel-border);
+        border-radius: 10px;
+        background: var(--panel-bg);
+        color: var(--text);
+        box-shadow: var(--shadow);
+        padding: 10px 14px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .toolbar button {
+        font-weight: 700;
+      }
+
+      .toolbar select {
+        min-width: 190px;
+      }
+
+      .toast {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        max-width: min(92vw, 420px);
+        padding: 12px 18px;
+        border-radius: 999px;
+        background: rgba(22, 25, 29, 0.9);
+        color: var(--text);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        text-align: center;
+        box-shadow: var(--shadow);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease;
+      }
+
+      .toast.visible {
+        opacity: 1;
+      }
+
+      @media (max-width: 640px) {
+        .toolbar {
+          left: 14px;
+          right: 14px;
+          justify-content: space-between;
+        }
+
+        .toolbar select,
+        .toolbar button {
+          flex: 1 1 180px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="map" aria-label="Map of Barangay Putho-Tuntungin"></div>
+
+      <div class="toolbar">
+        <button id="resetBtn" type="button">Reset view</button>
+        <select id="baseLayer" aria-label="Choose map base layer">
+          <option value="osm">OpenStreetMap</option>
+          <option value="esri">Esri World Imagery</option>
+        </select>
+      </div>
+
+      <div id="toast" class="toast" aria-live="polite"></div>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      crossorigin=""
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+    <script>
+      // The boundary GeoJSON is stored locally so the app does not call external APIs at runtime.
+      const boundaryDataUrl = '/data/putho-tuntungin.geojson';
+      const hallLocation = { lat: 14.1520018, lng: 121.2520883 };
+      const toastEl = document.getElementById('toast');
+      const resetBtn = document.getElementById('resetBtn');
+      const layerSelect = document.getElementById('baseLayer');
+
+      function showToast(message) {
+        toastEl.textContent = message;
+        toastEl.classList.add('visible');
+        clearTimeout(showToast.timerId);
+        showToast.timerId = setTimeout(() => {
+          toastEl.classList.remove('visible');
+        }, 2500);
+      }
+
+      function buildBoundaryFeature(geojson) {
+        return geojson && geojson.type === 'Feature'
+          ? geojson
+          : { type: 'Feature', properties: {}, geometry: geojson };
+      }
+
+      function buildMaskFeature(boundaryFeature) {
+        const coordinates = boundaryFeature.geometry.coordinates[0];
+        const outerRing = [
+          [-180, -90],
+          [-180, 90],
+          [180, 90],
+          [180, -90],
+          [-180, -90]
+        ];
+
+        return {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'Polygon',
+            coordinates: [outerRing, coordinates]
+          }
+        };
+      }
+
+      function isPointInsideBarangay(latlng) {
+        const point = turf.point([latlng.lng, latlng.lat]);
+        const inside = turf.booleanPointInPolygon(point, boundaryFeature);
+
+        if (!inside) {
+          showToast('That location is outside Barangay Putho-Tuntungin. Please choose a point within the barangay.');
+        }
+
+        return inside;
+      }
+
+      const osmTiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+      });
+
+      const esriWorldImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Tiles © Esri'
+      });
+
+      const map = L.map('map', {
+        maxZoom: 19,
+        minZoom: 0,
+        maxBoundsViscosity: 1.0,
+        zoomControl: true
+      });
+
+      const baseLayers = {
+        osm: osmTiles,
+        esri: esriWorldImagery
+      };
+
+      osmTiles.addTo(map);
+      map.setView([14.15148, 121.25243], 15);
+
+      let boundaryFeature = null;
+      let polygonBounds = null;
+      let minAllowedZoom = 0;
+
+      function updateMinZoom() {
+        if (!polygonBounds) return;
+        const computedZoom = map.getBoundsZoom(polygonBounds);
+        minAllowedZoom = computedZoom;
+        map.setMinZoom(computedZoom);
+      }
+
+      function applyBoundaryConstraints() {
+        if (!polygonBounds) return;
+        const paddedBounds = polygonBounds.pad(0.05);
+        map.setMaxBounds(paddedBounds);
+        updateMinZoom();
+      }
+
+      fetch(boundaryDataUrl)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error('Unable to load barangay boundary GeoJSON.');
+          }
+          return response.json();
+        })
+        .then((geojson) => {
+          boundaryFeature = buildBoundaryFeature(geojson);
+
+          const maskFeature = buildMaskFeature(boundaryFeature);
+          const maskLayer = L.geoJSON(maskFeature, {
+            style: {
+              color: 'rgba(0, 0, 0, 0)',
+              weight: 0,
+              fillColor: 'rgba(0, 0, 0, 0.55)',
+              fillOpacity: 0.55,
+              opacity: 0,
+              interactive: false
+            },
+            interactive: false
+          }).addTo(map);
+
+          // Draw border twice to get the red-then-white dashed 'candy stripe' effect.
+          const redBorder = L.geoJSON(boundaryFeature, {
+            style: {
+              color: '#E53935',
+              weight: 5,
+              fillOpacity: 0,
+              opacity: 1,
+              interactive: false
+            }
+          }).addTo(map);
+
+          const whiteBorder = L.geoJSON(boundaryFeature, {
+            style: {
+              color: '#FFFFFF',
+              weight: 5,
+              dashArray: '6 6',
+              fillOpacity: 0,
+              opacity: 1,
+              interactive: false
+            }
+          }).addTo(map);
+
+          maskLayer.bringToBack();
+          redBorder.bringToFront();
+          whiteBorder.bringToFront();
+
+          polygonBounds = redBorder.getBounds();
+          const center = polygonBounds.getCenter();
+          map.fitBounds(polygonBounds);
+          applyBoundaryConstraints();
+
+          // Optional marker for the barangay hall; it is checked against the barangay polygon before accepting any click.
+          const hallMarker = L.marker([hallLocation.lat, hallLocation.lng]).addTo(map);
+          hallMarker.bindPopup('<strong>Putho-Tuntungin Barangay Hall</strong><br>Apitong Street, Los Baños, Laguna');
+          hallMarker.on('click', (event) => {
+            if (!isPointInsideBarangay(event.latlng)) {
+              event.target.closePopup();
+            }
+          });
+
+          map.on('click', (event) => {
+            isPointInsideBarangay(event.latlng);
+          });
+
+          map.on('resize', () => {
+            applyBoundaryConstraints();
+          });
+
+          resetBtn.addEventListener('click', () => {
+            map.fitBounds(polygonBounds);
+            applyBoundaryConstraints();
+          });
+
+          layerSelect.addEventListener('change', (event) => {
+            const selectedKey = event.target.value;
+            Object.entries(baseLayers).forEach(([key, layer]) => {
+              if (key === selectedKey) {
+                if (!map.hasLayer(layer)) {
+                  layer.addTo(map);
+                }
+              } else if (map.hasLayer(layer)) {
+                map.removeLayer(layer);
+              }
+            });
+          });
+        })
+        .catch((error) => {
+          console.error(error);
+          showToast('The barangay boundary could not be loaded.');
+        });
+    </script>
+  </body>
+</html>

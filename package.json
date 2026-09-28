@@ -1,0 +1,22 @@
+{
+  "name": "barangay-e-reportyan-system",
+  "version": "1.0.0",
+  "description": "Full-Stack Barangay Public Service Portal & E-Reportyan System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "barangay",
+    "govph",
+    "e-governance",
+    "blotter",
+    "clearance"
+  ],
+  "author": "Antigravity Senior Full-Stack Engineer",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5"
+  }
+}
