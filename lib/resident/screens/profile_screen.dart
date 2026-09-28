@@ -335,7 +335,7 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButtonFormField<String>(
-                    value: selectedPurok,
+                    initialValue: selectedPurok,
                     decoration: const InputDecoration(
                       prefixIcon: Icon(Icons.location_on_outlined, color: Color(0xFF94A3B8), size: 18),
                       border: InputBorder.none,

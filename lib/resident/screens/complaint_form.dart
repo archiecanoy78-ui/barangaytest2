@@ -14,7 +14,6 @@ class ComplaintForm extends StatefulWidget {
 }
 
 class _ComplaintFormState extends State<ComplaintForm> {
-  final _formKey = GlobalKey<FormState>();
   int _currentStep = 1;
 
   // Form Fields
@@ -278,7 +277,7 @@ class _ComplaintFormState extends State<ComplaintForm> {
                   const Text('Complaint Category', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    value: _selectedCategory,
+                    initialValue: _selectedCategory,
                     items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                     onChanged: (v) => setState(() => _selectedCategory = v),
                     decoration: const InputDecoration(hintText: 'Select category'),

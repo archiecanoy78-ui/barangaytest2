@@ -543,7 +543,7 @@ class _SystemSettingsPageState extends State<SystemSettingsPage> {
         title: Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: PortalColors.textDark)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 11, color: PortalColors.textMuted)),
         value: value,
-        activeColor: PortalColors.primary,
+        activeTrackColor: PortalColors.primary,
         onChanged: onChanged,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),

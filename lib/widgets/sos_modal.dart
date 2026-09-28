@@ -112,8 +112,10 @@ void showSOSModal(BuildContext context) {
                       }
                       if (permission != LocationPermission.denied && permission != LocationPermission.deniedForever) {
                         Position position = await Geolocator.getCurrentPosition(
-                          desiredAccuracy: LocationAccuracy.high,
-                          timeLimit: const Duration(seconds: 5),
+                          locationSettings: const LocationSettings(
+                            accuracy: LocationAccuracy.high,
+                            timeLimit: Duration(seconds: 5),
+                          ),
                         );
                         lat = position.latitude;
                         lng = position.longitude;
@@ -127,6 +129,7 @@ void showSOSModal(BuildContext context) {
                   lat ??= 14.1520;
                   lng ??= 121.2518;
 
+                  if (!context.mounted) return;
                   final appState = context.read<AppState>();
                   final user = appState.currentUser!;
                   
@@ -152,8 +155,10 @@ void showSOSModal(BuildContext context) {
                   
                   appState.addReport(sosReport);
                   
-                  Navigator.pop(context); // Close Modal
-                  _showSuccessDialog(context);
+                  if (context.mounted) {
+                    Navigator.pop(context); // Close Modal
+                    _showSuccessDialog(context);
+                  }
                 });
               },
               icon: const Icon(Icons.crisis_alert_rounded, size: 20),

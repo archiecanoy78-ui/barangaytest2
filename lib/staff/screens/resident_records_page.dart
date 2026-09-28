@@ -232,6 +232,11 @@ class _ResidentRecordsPageState extends State<ResidentRecordsPage> {
                                                 onPressed: () => _showResidentDetails(context, res, userReports),
                                               ),
                                               IconButton(
+                                                icon: const Icon(Icons.edit_outlined, size: 18, color: Color(0xFF2563EB)),
+                                                tooltip: 'Edit Resident Profile',
+                                                onPressed: () => _showEditResidentDialog(context, res),
+                                              ),
+                                              IconButton(
                                                 icon: Icon(
                                                   res.isArchived ? Icons.restore_rounded : Icons.archive_rounded,
                                                   size: 18,
