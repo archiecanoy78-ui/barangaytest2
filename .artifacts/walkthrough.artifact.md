@@ -1,63 +1,51 @@
-# Walkthrough - Profile Validation, Settings Cleanup, and Real-Time Messages
+# Walkthrough - Resident Announcements, Notifications, FCM, and Real-Time Officials Directory
 
-I have implemented:
-1. **Resident Profile Update Form Validation**: Reusable `TextFormField` validators in `validators.dart` for Full Name (max 100 chars with live counter), Contact Number (`^09\d{9}$`), and Message box (max 200 chars with live counter), with Save button disabling and loading state.
-2. **Admin System Settings Cleanup**: Removed **Blotter & Incident Rules** and **Resident Verification** sections/tabs from `SystemSettingsPage`, leaving a clean General Office Profile settings view.
-3. **Real-Time Admin & Resident Messaging System**:
-   - Real-time conversation list and chat views on both resident and staff/admin sides.
-   - 200-character message limit with live counter ("150/200").
-   - Atomic batch writes updating `lastMessage`, `lastMessageAt`, and unread counts (`unreadCountAdmin` & `unreadCountResident`).
-   - Admin sidebar **Messages** navigation item with unread badge counter and search/filter by resident name.
-   - Updated Firestore Security Rules enforcing 100-char name, 11-digit 09 phone, 200-char message limits, and `isActiveUser()` authorization.
+We have successfully implemented all requested features for connecting resident announcements, setting up the notification system with FCM and Cloud Functions, removing the search bar, and providing a real-time active staff/admin directory with direct messaging and calls.
 
 ---
 
-## 🛠️ Changes Implemented
+## Changes Made
 
-### 1. Reusable Validation & Profile Screen
-- **`lib/validators.dart`**:
-  - `validateFullName`: Required, trimmed, max 100 characters.
-  - `validatePhone` / `validateUsernameMobile`: Digits only, exactly 11, starts with `09` (`^09\d{9}$`).
-  - `validateMessage`: Max 200 characters, trimmed, non-blank.
-- **`lib/resident/screens/profile_screen.dart`**:
-  - Form wrapped with `_formKey` and `autovalidateMode`.
-  - Full Name: `TextFormField` with `LengthLimitingTextInputFormatter(100)` and live counter.
-  - Phone Number: `TextFormField` with `FilteringTextInputFormatter.digitsOnly`, `LengthLimitingTextInputFormatter(11)`, and `keyboardType: TextInputType.number`.
-  - Save button disabled when form is invalid or saving + loading spinner while saving.
+### 1. Announcements Real-Time Sync & Search Removal
+- **[announcement.dart](file:///C:/Users/PC/AndroidStudioProjects/barangaytest2/lib/models/announcement.dart)**: Updated model to support unified field names (`title`, `body`/`content`, `category`/`type`, `createdAt`/`date`, `status`, `imageUrl`, `authorId`, `authorName`, `authorRole`, `isPinned`).
+- **[home_screen.dart](file:///C:/Users/PC/AndroidStudioProjects/barangaytest2/lib/resident/screens/home_screen.dart)**:
+  - Connected resident announcements to Firestore `announcements` collection via real-time `snapshots()` stream ordered by `createdAt` descending (limit 20), filtered to published/active status.
+  - Removed the search icon from the header and cleaned up unused search modal code.
+  - Added filter chips matching admin categories ("All Updates", "Urgent Advisories", "Water Service", "Public Health", "Community Clean-up", "Road Advisory", "General Notice").
+  - Added loading, empty, and error states with retry functionality.
 
-### 2. Admin System Settings Cleanup
-- **`lib/staff/screens/system_settings_page.dart`**:
-  - Removed **Blotter & Incident Rules** and **Resident Verification** tabs and navigation bar.
-  - Streamlined screen into a clean General Office Profile view. All underlying Firestore documents remain intact.
+### 2. Resident Notifications & FCM Integration
+- **[notification_service.dart](file:///C:/Users/PC/AndroidStudioProjects/barangaytest2/lib/services/notification_service.dart)**:
+  - Configures FCM permissions, saves device tokens under `/users/{uid}/fcmToken`, handles token refreshes, handles foreground banner messages, and manages topic subscription/unsubscription (`residents`).
+- **[notifications_screen.dart](file:///C:/Users/PC/AndroidStudioProjects/barangaytest2/lib/resident/screens/notifications_screen.dart)**:
+  - Real-time list of `/users/{uid}/notifications` ordered by `createdAt` descending with unread item highlighting, "Mark all as read", swipe-to-delete, and empty state.
+- **[home_screen.dart](file:///C:/Users/PC/AndroidStudioProjects/barangaytest2/lib/resident/screens/home_screen.dart)**:
+  - Header bell icon features a real-time red badge showing unread notification count.
+- **[functions/index.js](file:///C:/Users/PC/AndroidStudioProjects/barangaytest2/functions/index.js)**:
+  - `onAnnouncementCreated`: Pushes FCM notifications to topic `residents` and batch writes in-app notifications to active residents.
+  - `onReportStatusUpdated`: Notifies only the specific reporter (`reporterId`) when report status changes.
 
-### 3. Real-Time Messaging System & Sidebar Integration
-- **`lib/staff/screens/admin_messages_page.dart`**:
-  - Real-time stream of conversations from `/conversations` sorted by `lastMessageAt` descending.
-  - Shows resident name, last message preview, timestamp, unread badge, and resident search box.
-  - Conversation detail view: real-time message stream, 200-char input with live counter, auto-scroll, resets `unreadCountAdmin` on view, and sends staff replies via batch writes.
-- **`lib/resident/screens/resident_chat_screen.dart`**:
-  - Real-time message stream for the resident (`/conversations/{residentUid}/messages`).
-  - 200-character input with live counter.
-  - Sends messages via batch write updating `/conversations/{residentUid}` with `lastMessage`, `lastMessageAt`, and `unreadCountAdmin`.
-- **`lib/staff/widgets/app_scaffold.dart` & `lib/staff/staff_main.dart`**:
-  - Added **Messages** navigation item under `OPERATIONS` with unread badge counter.
-- **`firestore.rules`**:
-  - Added security rules for `/conversations/{conversationId}` and `/messages/{messageId}` enforcing `isActiveUser()`, `text.size() <= 200`, and `senderId == request.auth.uid`.
-  - Updated user profile rules for name length <= 100 and phone `^09[0-9]{9}$`.
+### 3. Real-Time Officials Directory & Contact Channels
+- **[directory_screen.dart](file:///C:/Users/PC/AndroidStudioProjects/barangaytest2/lib/resident/screens/directory_screen.dart)**:
+  - Replaced hardcoded list with real-time stream of active staff/admin accounts (`users` where `role` in `['staff', 'admin']`, `status == 'active'`, `isArchived != true`).
+  - Automatically hides archived/deleted accounts.
+  - **Message** button: Opens conversation in the existing Messages feature (`ResidentChatScreen`), respecting the 200-character message limit.
+  - **Call** button: Launches device phone dialer using `url_launcher` (`tel:{phoneNumber}`).
+  - Added loading, empty, and error states.
+
+### 4. Firestore Security Rules
+- **[firestore.rules](file:///C:/Users/PC/AndroidStudioProjects/barangaytest2/firestore.rules)**:
+  - Secured `announcements` read access for active published notices, `users/{uid}/notifications` for notification owners, and restricted public staff/admin profile reads to residents.
 
 ---
 
-## 🧪 Verification & Test Results
+## Verification Results
 
-### Automated Verification
-- **`flutter analyze`**: **`No issues found!`** (0 errors, 0 warnings).
-- **`flutter test`**: **`All tests passed!`** (7/7 unit and widget tests passed).
+### Automated Tests
+- Ran `flutter analyze`: **0 errors or warnings found**.
 
-> [!NOTE]
-> ### 📋 Test Instructions
-> 1. **Profile Validation**: Edit profile in Resident App. Try a 101-character name, a non-09 number, or a 10-digit number. Confirm each is blocked with error messages and live counters.
-> 2. **System Settings Cleanup**: Open admin System Settings. Confirm Blotter and Resident Verification tabs are removed and General Office Profile displays cleanly.
-> 3. **Real-Time Messages**:
->    - Open Resident Chat and send a message (e.g. "Good morning Barangay Staff").
->    - Confirm the message appears on the Admin side in real time under the **Messages** sidebar item with an unread badge.
->    - Tap the conversation on Admin side, verify unread badge resets, and send a reply. Confirm the resident receives the reply in real time.
+### Test Steps for Verification
+1. **Announcements**: Post an announcement from the Admin Portal and confirm it appears instantly in the Resident App, and check that filter chips filter correctly.
+2. **Search Bar Removal**: Verify the search icon is absent from the Announcements header and Directory screen.
+3. **Notifications**: Create a new announcement or update a case status to Solved in the Admin console. Verify the resident bell icon displays an unread count badge, and tapping it opens the Notifications screen.
+4. **Directory**: Open Directory in Resident app. Verify real staff/admin accounts are listed, archived accounts disappear, and tapping **Message** or **Call** initiates communication correctly.

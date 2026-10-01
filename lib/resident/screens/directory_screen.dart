@@ -1,264 +1,251 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../app_state.dart';
-import '../../models/message.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'resident_chat_screen.dart';
 
 class DirectoryScreen extends StatelessWidget {
   const DirectoryScreen({super.key});
 
+  Future<void> _makePhoneCall(BuildContext context, String phoneNumber) async {
+    final cleanNumber = phoneNumber.trim();
+    if (cleanNumber.isEmpty || cleanNumber == 'N/A') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Contact number not available.')),
+      );
+      return;
+    }
+    final uri = Uri.parse('tel:$cleanNumber');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not launch phone dialer for $cleanNumber')),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error launching call: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FD),
       appBar: AppBar(
-        title: const Text('Barangay Directory', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Barangay Directory', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+        backgroundColor: Colors.white,
         elevation: 0,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Directory Hero / Banner
-          Container(
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.blue.shade800, Colors.blue.shade600],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.blue.shade900.withValues(alpha: 0.2),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.contact_phone_rounded, color: Colors.white, size: 28),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Direct Contact Channels',
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Message officials or contact emergency hotlines directly.',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const Text(
-            'Barangay Officials',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          _buildOfficialCard(
-            context,
-            'Hon. Pedro Penduko',
-            'Barangay Captain',
-            'Overall Executive & Peace Keeping',
-            Icons.military_tech_rounded,
-          ),
-          _buildOfficialCard(
-            context,
-            'Hon. Maria Clara',
-            'Barangay Secretary',
-            'Records, Clearances & Documents',
-            Icons.edit_document,
-          ),
-          _buildOfficialCard(
-            context,
-            'Hon. Juan Dela Cruz',
-            'Barangay Treasurer',
-            'Revenue, Payments & Public Funds',
-            Icons.account_balance_wallet_rounded,
-          ),
-          _buildOfficialCard(
-            context,
-            'Hon. Andres Bonifacio',
-            'Chief Tanod',
-            'Security & Community Patrol',
-            Icons.shield_rounded,
-          ),
-
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.schedule_rounded, color: Colors.blue.shade700, size: 28),
-                const SizedBox(width: 14),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Barangay Hall Operating Hours', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      SizedBox(height: 4),
-                      Text('Monday to Friday: 8:00 AM – 5:00 PM\nERT & Patrol: 24/7 Standby', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildOfficialCard(BuildContext context, String name, String position, String duty, IconData icon) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(14.0),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 26,
-              backgroundColor: Colors.blue.shade50,
-              child: Icon(icon, color: Colors.blue.shade800, size: 26),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  const SizedBox(height: 2),
-                  Text(position, style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w600, fontSize: 12)),
-                  const SizedBox(height: 2),
-                  Text(duty, style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
-                ],
-              ),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => _showMessageModal(context, name, position),
-              icon: const Icon(Icons.send_rounded, size: 14),
-              label: const Text('Message', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showMessageModal(BuildContext context, String name, String position) {
-    final messageController = TextEditingController();
-    final appState = context.read<AppState>();
-    final user = appState.currentUser!;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 20,
-          right: 20,
-          top: 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: Colors.blue.shade100,
-                  child: Icon(Icons.person, color: Colors.blue.shade800),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .where('role', whereIn: ['staff', 'admin'])
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Message $name', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    Text(position, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                    const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+                    const SizedBox(height: 12),
+                    Text('Error loading directory: ${snapshot.error}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: Colors.red)),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => (context as Element).markNeedsBuild(),
+                      child: const Text('Retry'),
+                    ),
                   ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: messageController,
-              decoration: InputDecoration(
-                hintText: 'Type your message or inquiry here...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              maxLines: 4,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {
-                if (messageController.text.trim().isNotEmpty) {
-                  appState.sendMessage(Message(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    senderId: user.id,
-                    senderName: user.name,
-                    recipientPosition: position,
-                    content: messageController.text.trim(),
-                    timestamp: DateTime.now(),
-                  ));
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Message sent successfully!')),
+            );
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final docs = snapshot.data!.docs.where((doc) {
+            final data = doc.data();
+            final status = data['status'] ?? 'active';
+            final isArchived = data['isArchived'] ?? false;
+            return status == 'active' && !isArchived;
+          }).toList();
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Directory Hero / Banner
+              Container(
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.blue.shade800, Colors.blue.shade600],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.blue.shade900.withValues(alpha: 0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.contact_phone_rounded, color: Colors.white, size: 28),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Direct Contact Channels',
+                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Message officials or contact emergency hotlines directly.',
+                            style: TextStyle(color: Colors.white70, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Text(
+                'Barangay Officials & Staff',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              ),
+              const SizedBox(height: 12),
+
+              if (docs.isEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  alignment: Alignment.center,
+                  child: const Text('No active officials available at this time.', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                )
+              else
+                ...docs.map((doc) {
+                  final data = doc.data();
+                  final name = data['name'] ?? 'Official';
+                  final role = data['role'] ?? 'staff';
+                  final staffRole = data['staffRole'];
+                  final position = staffRole != null ? staffRole.toString().split('.').last.toUpperCase() : (role == 'admin' ? 'Barangay Captain / Admin' : 'Barangay Staff');
+                  final phoneNumber = data['phoneNumber'] ?? data['username'] ?? 'N/A';
+                  final photoUrl = data['idPhotoUrl'] ?? data['idImagePath'];
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    elevation: 1,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14.0),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 26,
+                            backgroundColor: Colors.blue.shade50,
+                            backgroundImage: photoUrl != null && photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
+                            child: photoUrl == null || photoUrl.isEmpty
+                                ? Icon(Icons.person_rounded, color: Colors.blue.shade800, size: 26)
+                                : null,
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F172A))),
+                                const SizedBox(height: 2),
+                                Text(position, style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.w600, fontSize: 12)),
+                                const SizedBox(height: 2),
+                                Text('Contact: $phoneNumber', style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                onPressed: () => _makePhoneCall(context, phoneNumber),
+                                icon: const Icon(Icons.call_rounded, size: 20, color: Colors.green),
+                                tooltip: 'Call Official',
+                              ),
+                              const SizedBox(width: 4),
+                              ElevatedButton.icon(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const ResidentChatScreen()),
+                                ),
+                                icon: const Icon(Icons.send_rounded, size: 14),
+                                label: const Text('Message', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue.shade700,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  elevation: 0,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   );
-                }
-              },
-              icon: const Icon(Icons.send_rounded, size: 18),
-              label: const Text('Send Message', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                }),
+
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.schedule_rounded, color: Colors.blue.shade700, size: 28),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Barangay Hall Operating Hours', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          SizedBox(height: 4),
+                          Text('Monday to Friday: 8:00 AM – 5:00 PM\nERT & Patrol: 24/7 Standby', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 25),
-          ],
-        ),
+              const SizedBox(height: 20),
+            ],
+          );
+        },
       ),
     );
   }

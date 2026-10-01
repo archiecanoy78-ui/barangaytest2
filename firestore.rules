@@ -23,12 +23,31 @@ service cloud.firestore {
 
     // User Profile Rules
     match /users/{userId} {
-      allow read: if isActiveUser();
-      allow create, update: if isActiveUser() &&
-        request.resource.data.name.size() >= 3 &&
-        request.resource.data.name.size() <= 100 &&
-        request.resource.data.phoneNumber.matches('^09[0-9]{9}$');
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        request.auth.uid == userId ||
+        (resource.data.role in ['admin', 'staff'] && resource.data.status == 'active' &&
+         (!resource.data.keys().contains('isArchived') || resource.data.isArchived == false))
+      );
+      allow create, update: if isAuthenticated() && (
+        isAdmin() || request.auth.uid == userId
+      );
       allow delete: if isAdmin();
+
+      // Notifications Subcollection Rules
+      match /notifications/{notificationId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
+    }
+
+    // Announcements Rules
+    match /announcements/{announcementId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() ||
+        resource.data.status == 'published' ||
+        resource.data.status == 'Active'
+      );
+      allow create, update, delete: if isAdmin();
     }
 
     // Conversations & Real-Time Messaging Rules
