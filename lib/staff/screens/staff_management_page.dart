@@ -1,8 +1,11 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../app_state.dart';
 import '../../models/user.dart';
+import '../../validators.dart';
+import '../../widgets/form_draft_helper.dart';
 
 class StaffManagementPage extends StatefulWidget {
   const StaffManagementPage({super.key});
@@ -179,7 +182,7 @@ class _StaffManagementPageState extends State<StaffManagementPage> {
                                       DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                                     ],
-                                    rows: paginatedStaff.map((s) {
+                                    rows: paginatedStaff.map((User s) {
                                       return DataRow(cells: [
                                         DataCell(
                                           Row(
@@ -344,183 +347,328 @@ class _StaffManagementPageState extends State<StaffManagementPage> {
     );
   }
 
-  void _showAddStaffDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
+  void _showAddStaffDialog(BuildContext context) async {
+    final appState = Provider.of<AppState>(context, listen: false);
+    final currentUid = appState.currentUser?.id ?? 'admin';
+    final draftHelper = FormDraftHelper(formKey: 'add_staff', uid: currentUid);
+
+    final firstNameCtrl = TextEditingController();
+    final lastNameCtrl = TextEditingController();
     final usernameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
     final purokCtrl = TextEditingController(text: 'Main');
-    final passwordCtrl = TextEditingController(text: 'password');
+    final passwordCtrl = TextEditingController();
     StaffRole selectedStaffRole = StaffRole.tanod;
     UserRole selectedUserRole = UserRole.staff;
+    bool obscurePassword = true;
     String? errorMsg;
     String? attachedIdPhotoName;
 
+    final draft = await draftHelper.loadDraft();
+    if (draft != null) {
+      firstNameCtrl.text = draft['firstName']?.toString() ?? '';
+      lastNameCtrl.text = draft['lastName']?.toString() ?? '';
+      usernameCtrl.text = draft['username']?.toString() ?? '';
+      purokCtrl.text = draft['purok']?.toString() ?? 'Main';
+    }
+
+    if (!context.mounted) return;
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setModalState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Add New Staff Member', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (errorMsg != null)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF2F2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600)),
-                    ),
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Full Name *', prefixIcon: Icon(Icons.person)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: usernameCtrl,
-                    decoration: const InputDecoration(labelText: 'Username *', prefixIcon: Icon(Icons.account_circle)),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<StaffRole>(
-                    initialValue: selectedStaffRole,
-                    decoration: const InputDecoration(labelText: 'Staff Role Designation', prefixIcon: Icon(Icons.badge)),
-                    items: StaffRole.values.map((role) {
-                      return DropdownMenuItem(
-                        value: role,
-                        child: Text(role.name.toUpperCase()),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) setModalState(() => selectedStaffRole = val);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<UserRole>(
-                    initialValue: selectedUserRole,
-                    decoration: const InputDecoration(labelText: 'Access Level', prefixIcon: Icon(Icons.security)),
-                    items: const [
-                      DropdownMenuItem(value: UserRole.staff, child: Text('Staff')),
-                      DropdownMenuItem(value: UserRole.admin, child: Text('Administrator')),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) setModalState(() => selectedUserRole = val);
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: purokCtrl,
-                    decoration: const InputDecoration(labelText: 'Assigned Area / Purok', prefixIcon: Icon(Icons.location_on)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: phoneCtrl,
-                    decoration: const InputDecoration(labelText: 'Phone Number', prefixIcon: Icon(Icons.phone)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passwordCtrl,
-                    decoration: const InputDecoration(labelText: 'Account Password *', prefixIcon: Icon(Icons.lock)),
-                  ),
-                  const SizedBox(height: 16),
-                  // Mandatory ID Photo Upload Field
-                  InkWell(
-                    onTap: () {
-                      setModalState(() {
-                        attachedIdPhotoName = 'staff_id_${DateTime.now().millisecondsSinceEpoch}.jpg';
-                        errorMsg = null;
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                      decoration: BoxDecoration(
-                        color: attachedIdPhotoName != null ? Colors.green.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: attachedIdPhotoName != null ? Colors.green : const Color(0xFFCBD5E1),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            attachedIdPhotoName != null ? Icons.check_circle_rounded : Icons.upload_file_rounded,
-                            size: 18,
-                            color: attachedIdPhotoName != null ? Colors.green : const Color(0xFF64748B),
+        builder: (context, setModalState) {
+          void updateDraft() {
+            draftHelper.onFieldChanged({
+              'firstName': firstNameCtrl.text,
+              'lastName': lastNameCtrl.text,
+              'username': usernameCtrl.text,
+              'purok': purokCtrl.text,
+            });
+            setModalState(() {});
+          }
+
+          final pass = passwordCtrl.text;
+          final hasMinMax = pass.length >= 8;
+          final hasUpper = pass.contains(RegExp(r'[A-Z]'));
+          final hasLower = pass.contains(RegExp(r'[a-z]'));
+          final hasDigit = pass.contains(RegExp(r'[0-9]'));
+          final hasSpecial = pass.contains(RegExp(r'[^A-Za-z0-9]'));
+
+          final isFormValid =
+              Validators.validateFirstName(firstNameCtrl.text) == null &&
+              Validators.validateLastName(lastNameCtrl.text) == null &&
+              Validators.validateUsernameMobile(usernameCtrl.text) == null &&
+              Validators.validatePassword(passwordCtrl.text) == null &&
+              attachedIdPhotoName != null;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Add New Staff Member', style: TextStyle(fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: 440,
+                child: Form(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (errorMsg != null)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              attachedIdPhotoName != null ? 'ID Attached: $attachedIdPhotoName (Tap to replace)' : 'Upload ID Photo * (JPG/PNG/PDF, max 5MB)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: attachedIdPhotoName != null ? Colors.green.shade700 : const Color(0xFF64748B),
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                          child: Text(errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: firstNameCtrl,
+                              maxLength: 50,
+                              inputFormatters: [LengthLimitingTextInputFormatter(50)],
+                              decoration: const InputDecoration(labelText: 'First Name *', prefixIcon: Icon(Icons.person_outline)),
+                              validator: (v) => Validators.validateFirstName(v ?? ''),
+                              onChanged: (_) => updateDraft(),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: lastNameCtrl,
+                              maxLength: 50,
+                              inputFormatters: [LengthLimitingTextInputFormatter(50)],
+                              decoration: const InputDecoration(labelText: 'Last Name *', prefixIcon: Icon(Icons.person_outline)),
+                              validator: (v) => Validators.validateLastName(v ?? ''),
+                              onChanged: (_) => updateDraft(),
                             ),
                           ),
                         ],
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: usernameCtrl,
+                        maxLength: 11,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(11),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Username (11-digit Mobile Number starting with 09) *',
+                          prefixIcon: Icon(Icons.phone_android_rounded),
+                        ),
+                        validator: (v) => Validators.validateUsernameMobile(v ?? ''),
+                        onChanged: (_) => updateDraft(),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<StaffRole>(
+                        initialValue: selectedStaffRole,
+                        decoration: const InputDecoration(labelText: 'Staff Role Designation', prefixIcon: Icon(Icons.badge)),
+                        items: StaffRole.values.map((role) {
+                          return DropdownMenuItem(
+                            value: role,
+                            child: Text(role.name.toUpperCase()),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setModalState(() => selectedStaffRole = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<UserRole>(
+                        initialValue: selectedUserRole,
+                        decoration: const InputDecoration(labelText: 'Access Level', prefixIcon: Icon(Icons.security)),
+                        items: const [
+                          DropdownMenuItem(value: UserRole.staff, child: Text('Staff')),
+                          DropdownMenuItem(value: UserRole.admin, child: Text('Administrator')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setModalState(() => selectedUserRole = val);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: purokCtrl,
+                        decoration: const InputDecoration(labelText: 'Assigned Area / Purok', prefixIcon: Icon(Icons.location_on_outlined)),
+                        onChanged: (_) => updateDraft(),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: passwordCtrl,
+                        obscureText: obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Account Password *',
+                          prefixIcon: const Icon(Icons.lock_outline_rounded),
+                          suffixIcon: IconButton(
+                            icon: Icon(obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+                            onPressed: () => setModalState(() => obscurePassword = !obscurePassword),
+                          ),
+                        ),
+                        validator: (v) => Validators.validatePassword(v ?? ''),
+                        onChanged: (_) => updateDraft(),
+                      ),
+                      const SizedBox(height: 10),
+                      // Password Criteria Checklist
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _ruleItem('8+ characters long', hasMinMax),
+                            _ruleItem('At least one uppercase letter (A-Z)', hasUpper),
+                            _ruleItem('At least one lowercase letter (a-z)', hasLower),
+                            _ruleItem('At least one digit (0-9)', hasDigit),
+                            _ruleItem('At least one special character (!@#\$%^&*)', hasSpecial),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Mandatory ID Photo Upload Field
+                      InkWell(
+                        onTap: () {
+                          setModalState(() {
+                            attachedIdPhotoName = 'staff_id_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                            errorMsg = null;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: attachedIdPhotoName != null ? Colors.green.withValues(alpha: 0.05) : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: attachedIdPhotoName != null ? Colors.green : const Color(0xFFCBD5E1),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                attachedIdPhotoName != null ? Icons.check_circle_rounded : Icons.upload_file_rounded,
+                                size: 18,
+                                color: attachedIdPhotoName != null ? Colors.green : const Color(0xFF64748B),
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  attachedIdPhotoName != null ? 'ID Attached: $attachedIdPhotoName (Tap to replace)' : 'Upload ID Photo * (JPG/PNG/PDF, max 5MB)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: attachedIdPhotoName != null ? Colors.green.shade700 : const Color(0xFF64748B),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  final hasContent = firstNameCtrl.text.isNotEmpty || lastNameCtrl.text.isNotEmpty || usernameCtrl.text.isNotEmpty;
+                  if (hasContent) {
+                    final discard = await FormDraftHelper.showDiscardConfirmationDialog(context);
+                    if (discard) {
+                      await draftHelper.clearDraft();
+                      if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                    }
+                  } else {
+                    Navigator.pop(dialogCtx);
+                  }
+                },
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: isFormValid
+                    ? () async {
+                        final fullName = '${firstNameCtrl.text.trim()} ${lastNameCtrl.text.trim()}';
+                        final username = usernameCtrl.text.trim();
+                        final purok = purokCtrl.text.trim().isEmpty ? 'Main' : purokCtrl.text.trim();
+                        final password = passwordCtrl.text;
+
+                        final newStaff = User(
+                          id: 'staff_${DateTime.now().millisecondsSinceEpoch}',
+                          name: fullName,
+                          username: username,
+                          role: selectedUserRole,
+                          staffRole: selectedStaffRole,
+                          purok: purok,
+                          phoneNumber: username,
+                          isVerified: true,
+                          password: password,
+                          idImagePath: attachedIdPhotoName,
+                        );
+
+                        final err = await appState.registerUserWithoutSigningOutAdmin(newStaff);
+
+                        if (err != null) {
+                          setModalState(() => errorMsg = err);
+                          return;
+                        }
+
+                        await draftHelper.clearDraft();
+                        if (dialogCtx.mounted) {
+                          Navigator.pop(dialogCtx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Staff member "$fullName" added successfully!')),
+                          );
+                        }
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  disabledBackgroundColor: const Color(0xFFCBD5E1),
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Add Staff Member'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _ruleItem(String label, bool isMet) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            isMet ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            size: 13,
+            color: isMet ? Colors.green : const Color(0xFF94A3B8),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel'),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isMet ? const Color(0xFF15803D) : const Color(0xFF64748B),
+              fontWeight: isMet ? FontWeight.w600 : FontWeight.normal,
             ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                final username = usernameCtrl.text.trim();
-                final phone = phoneCtrl.text.trim();
-                final purok = purokCtrl.text.trim();
-                final password = passwordCtrl.text.trim();
-
-                if (name.isEmpty || username.isEmpty || password.isEmpty) {
-                  setModalState(() => errorMsg = 'Please fill in Name, Username, and Password.');
-                  return;
-                }
-                if (attachedIdPhotoName == null) {
-                  setModalState(() => errorMsg = 'A valid ID photo is required to add staff.');
-                  return;
-                }
-
-                await context.read<AppState>().addStaff(
-                      name: name,
-                      username: username,
-                      staffRole: selectedStaffRole,
-                      purok: purok.isEmpty ? 'Main' : purok,
-                      phoneNumber: phone.isEmpty ? 'N/A' : phone,
-                      password: password,
-                      idPhotoUrl: attachedIdPhotoName!,
-                      role: selectedUserRole,
-                    );
-
-                if (dialogCtx.mounted) {
-                  Navigator.pop(dialogCtx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Staff member "$name" added successfully (Pending Verification)!')),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
-              child: const Text('Add Staff Member'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

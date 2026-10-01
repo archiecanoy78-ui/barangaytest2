@@ -1,9 +1,69 @@
 class Validators {
+  static String? validateFirstName(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return 'First name is required.';
+    if (v.length < 3) return 'First name must be at least 3 characters.';
+    if (v.length > 50) return 'First name cannot exceed 50 characters.';
+    final nameReg = RegExp(r"^[A-Za-zÀ-ž\s]+$");
+    if (!nameReg.hasMatch(v)) return 'First name can only contain letters and spaces.';
+    return null;
+  }
+
+  static String? validateLastName(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return 'Last name is required.';
+    if (v.length < 3) return 'Last name must be at least 3 characters.';
+    if (v.length > 50) return 'Last name cannot exceed 50 characters.';
+    final nameReg = RegExp(r"^[A-Za-zÀ-ž\s]+$");
+    if (!nameReg.hasMatch(v)) return 'Last name can only contain letters and spaces.';
+    return null;
+  }
+
+  static String? validateFullName(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return 'Full name is required.';
+    if (v.length < 3) return 'Full name must be at least 3 characters.';
+    if (v.length > 100) return 'Full name must not exceed 100 characters.';
+    final nameReg = RegExp(r"^[A-Za-zÀ-ž\s]+$");
+    if (!nameReg.hasMatch(v)) return 'Full name can only contain letters and spaces.';
+    return null;
+  }
+
+  static String? validateName(String value) => validateFullName(value);
+
+  static String? validateUsernameMobile(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return 'Mobile number username is required.';
+    final mobileReg = RegExp(r'^09\d{9}$');
+    if (!mobileReg.hasMatch(v)) return 'Enter a valid 11-digit number starting with 09.';
+    return null;
+  }
+
+  static String? validateUsername(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return 'Username is required.';
+    if (RegExp(r'^\d+$').hasMatch(v)) {
+      return validateUsernameMobile(v);
+    }
+    if (v.length < 3) return 'Username must be at least 3 characters.';
+    if (v.length > 50) return 'Username cannot exceed 50 characters.';
+    final userReg = RegExp(r'^[A-Za-z0-9_\.]+$');
+    if (!userReg.hasMatch(v)) return 'Username can only contain letters, numbers, underscores, and periods.';
+    return null;
+  }
+
   static String? validatePhone(String value) {
     final v = value.trim();
     if (v.isEmpty) return 'Phone number is required.';
-    final phoneReg = RegExp(r'^\d{11}$');
-    if (!phoneReg.hasMatch(v)) return 'Phone must be exactly 11 digits (e.g. 09123456789).';
+    final phoneReg = RegExp(r'^09\d{9}$');
+    if (!phoneReg.hasMatch(v)) return 'Enter a valid 11-digit number starting with 09.';
+    return null;
+  }
+
+  static String? validateMessage(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return 'Message cannot be empty.';
+    if (v.length > 200) return 'Message must not exceed 200 characters.';
     return null;
   }
 
@@ -13,24 +73,6 @@ class Validators {
     if (v.contains('@')) return validateEmail(v);
     if (RegExp(r'^\d+$').hasMatch(v)) return validatePhone(v);
     return 'Contact must be a valid email or 11-digit phone number.';
-  }
-
-  static String? validateName(String value) {
-    final v = value.trim();
-    if (v.isEmpty) return 'Name is required.';
-    final nameReg = RegExp(r"^[A-Za-zÀ-ž\s'\-]+$");
-    if (!nameReg.hasMatch(v)) return 'Name may contain letters, spaces, hyphens, or apostrophes only.';
-    if (v.length < 2) return 'Name is too short.';
-    if (v.length > 60) return 'Name is too long.';
-    return null;
-  }
-
-  static String? validateUsername(String value) {
-    final v = value.trim();
-    if (v.isEmpty) return 'Username is required.';
-    final userReg = RegExp(r'^[A-Za-z0-9_\.\-]{3,32}$');
-    if (!userReg.hasMatch(v)) return 'Username must be 3-32 chars; letters, numbers, dot, underscore or dash.';
-    return null;
   }
 
   static String? validateEmail(String value) {
@@ -44,11 +86,10 @@ class Validators {
   static String? validatePassword(String value) {
     final v = value;
     if (v.isEmpty) return 'Password is required.';
-    if (v.length < 8 || v.length > 12) return 'Password must be 8-12 characters.';
-    if (!RegExp(r'[A-Z]').hasMatch(v)) return 'Include at least one uppercase letter.';
-    if (!RegExp(r'[a-z]').hasMatch(v)) return 'Include at least one lowercase letter.';
-    if (!RegExp(r'[0-9]').hasMatch(v)) return 'Include at least one digit.';
-    if (!RegExp(r'[!@#\$%\^&\*(),.?":\{\}\|<>_\-+=\[\]\\/]').hasMatch(v)) return 'Include at least one special character.';
+    final passReg = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$');
+    if (!passReg.hasMatch(v)) {
+      return 'Password must be 8+ chars with uppercase, lowercase, digit, and special char.';
+    }
     return null;
   }
 }

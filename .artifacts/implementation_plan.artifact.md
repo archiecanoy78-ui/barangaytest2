@@ -1,48 +1,69 @@
-# Emergency Location Tracking & Admin Map Feature - Implementation Plan
+# Announcements Stream, Resident Notifications, FCM Triggers, and Real-Time Officials Directory - Implementation Plan
 
-Implement real-time GPS location tracking for emergency SOS reporting on the resident side, and an interactive Emergency Monitoring Map & Dashboard on the admin side with status management and marker color coding.
+Implement:
+1. Real-time Firestore synchronization between Admin and Resident Announcements with category filtering, loading/empty/error states, and removal of the search bar.
+2. Complete Resident Notification System: FCM topic subscription, Cloud Function notification triggers for new announcements and case status updates (`onUpdate`), and an in-app Notifications Screen with unread badges.
+3. Real-Time Officials Directory: Dynamic listing of active staff/admin accounts from Firestore with direct **Message** (Messages feature) and **Call** (`url_launcher`) buttons.
+
+---
 
 ## User Review Required
 
 > [!IMPORTANT]
-> - **Real-Time GPS Location**: We will add `geolocator` dependency and implement permission requests & device/browser geolocation retrieval when an SOS emergency is reported.
-> - **Fallback**: If location permission is denied, residents will be informed and can provide a fallback manual location / Purok coordinate.
-> - **Admin Emergency Map**: A dedicated Emergency Map page with a live active emergency sidebar, interactive markers color-coded by status (🔴 Pending, 🟡 Acknowledged, 🔵 Responding, 🟢 Resolved, ⚪ Cancelled), and center-on-select functionality.
+> - **Shared Announcements Collection**: Both Admin and Resident apps will consume `/announcements` in Firestore with fields: `title`, `body`, `category`, `imageUrl`, `authorId`, `authorName`, `authorRole`, `createdAt`, `status: 'published'|'archived'`, `isPinned`.
+> - **Cloud Function Triggers**:
+>   - `onAnnouncementCreated`: Triggered when an announcement is published -> pushes FCM notification to the `residents` topic and writes in-app notifications to `/users/{uid}/notifications/{id}`.
+>   - `onReportStatusUpdated`: Triggered when a report's status changes -> notifies only the reporter resident.
+> - **FCM Token Management**: Saves `fcmToken` under `/users/{uid}`, subscribes to `residents` FCM topic on resident login, and unsubscribes on logout.
+> - **Real-Time Directory Chat & Call**: The Directory screen fetches active staff/admin accounts, and tapping **Message** opens a conversation in the Messages system with a 200-character limit. Tapping **Call** opens the device phone dialer.
+
+---
 
 ## Proposed Changes
 
-### Dependencies
-#### [MODIFY] [pubspec.yaml](file:///C:/Users/Archie J. Canoy/Desktop/barangaytest/pubspec.yaml)
-- Add `geolocator: ^13.0.2` for cross-platform GPS location acquisition (web and mobile).
+### 1. Dependencies & Announcement Firestore Sync
+#### [MODIFY] [pubspec.yaml](file:///C:/Users/Archie%20J.%20Canoy/Desktop/barangaytest/pubspec.yaml)
+- Add `firebase_messaging: ^15.1.3` and `url_launcher: ^6.3.0`.
 
-### Data Models
-#### [MODIFY] [report.dart](file:///C:/Users/Archie J. Canoy/Desktop/barangaytest/lib/models/report.dart)
-- Add `latitude` (double?) and `longitude` (double?) fields to `Report` model and update `toMap()` / `fromMap()`.
+#### [MODIFY] [home_screen.dart](file:///C:/Users/Archie%20J.%20Canoy/Desktop/barangaytest/lib/resident/screens/home_screen.dart)
+- Consume `/announcements` collection via `snapshots()` filtered to `status == 'published'`, ordered by `createdAt` descending.
+- Remove search icon from top bar. Keep notification bell icon with red unread badge and count.
+- Update filter chips to filter dynamically by Firestore `category`.
+- Add loading, empty ("No announcements yet"), and error states with a retry button.
 
-### Resident Side - Emergency SOS Reporting with GPS
-#### [MODIFY] [sos_modal.dart](file:///C:/Users/Archie J. Canoy/Desktop/barangaytest/lib/widgets/sos_modal.dart)
-- Update confirmation dialog to inform residents that their GPS location will be shared with emergency administrators.
-- Implement permission check and actual GPS location fetching (`Geolocator.getCurrentPosition()`) upon confirmation.
-- Handle permission denial gracefully with fallback coordinates / manual entry notification.
-- Save `latitude`, `longitude`, and timestamp in the `Report` object sent to Firestore.
+### 2. Resident Notification System & FCM Triggers
+#### [NEW] [notifications_screen.dart](file:///C:/Users/Archie%20J.%20Canoy/Desktop/barangaytest/lib/resident/screens/notifications_screen.dart)
+- Real-time list of `/users/{uid}/notifications` ordered by `createdAt` descending.
+- Highlights unread items, provides "Mark all as read", swipe-to-delete, and navigates to the announcement or report detail view on tap.
 
-### Admin Side - Emergency Monitoring & Map Dashboard
-#### [NEW] [emergency_map_page.dart](file:///C:/Users/Archie J. Canoy/Desktop/barangaytest/lib/staff/screens/emergency_map_page.dart)
-- Dedicated Emergency Map dashboard featuring:
-  - Interactive map (`flutter_map`) displaying live emergency markers.
-  - Color-coded pins: 🔴 Pending, 🟡 Acknowledged, 🔵 Responding, 🟢 Resolved, ⚪ Cancelled.
-  - Active emergency sidebar listing active emergencies.
-  - Click-to-center and marker info popup (Resident name, type, description, date/time, status, coordinates).
-  - Status update dropdown/actions (`Pending`, `Acknowledged`, `Responding`, `Resolved`, `Cancelled`).
+#### [NEW] [notification_service.dart](file:///C:/Users/Archie%20J.%20Canoy/Desktop/barangaytest/lib/services/notification_service.dart)
+- Handles FCM permission request, saves token to `/users/{uid}`, handles foreground/background message handlers, and subscribes/unsubscribes to the `residents` FCM topic.
 
-#### [MODIFY] [app_scaffold.dart](file:///C:/Users/Archie J. Canoy/Desktop/barangaytest/lib/staff/widgets/app_scaffold.dart) or navigation routes
-- Add "Emergency Map" / "Emergency Monitoring" to the staff portal navigation drawer / menu.
+#### [MODIFY] [functions/index.js](file:///C:/Users/Archie%20J.%20Canoy/Desktop/barangaytest/functions/index.js)
+- `onAnnouncementCreated`: Fires on `onCreate` in `announcements` collection, sends FCM message to topic `residents`, and batch writes notification records into `/users/{uid}/notifications`.
+- `onReportStatusUpdated`: Fires on `onUpdate` in `reports` collection when `status` changes, sending targeted FCM and in-app notification to the report author.
+
+### 3. Real-Time Officials Directory
+#### [MODIFY] [directory_screen.dart](file:///C:/Users/Archie%20J.%20Canoy/Desktop/barangaytest/lib/resident/screens/directory_screen.dart)
+- Stream `/users` where `role` in `['staff', 'admin']` and `status == 'active'`.
+- Render official cards with photo, name, role, and phone number.
+- **Message** button: Opens/creates conversation in `/conversations/{residentUid}` with target official and opens `ResidentChatScreen`.
+- **Call** button: Uses `url_launcher` to launch `tel:{phoneNumber}`.
+- Remove search bar from Directory screen.
+
+#### [MODIFY] [firestore.rules](file:///C:/Users/Archie%20J.%20Canoy/Desktop/barangaytest/firestore.rules)
+- Update rules for `/announcements`, `/users/{uid}/notifications`, and public official fields.
+
+---
 
 ## Verification Plan
 
 ### Automated Tests
-- Run `flutter analyze` to verify code compilation and static analysis.
+- Run `flutter analyze` to ensure 0 static analysis errors.
+- Run `flutter test` to verify unit and widget tests pass.
 
 ### Manual Verification
-- Test filing an SOS report as a resident, granting/denying location permission, and verifying actual coordinates are captured.
-- Test Admin Emergency Map page: viewing markers, clicking items in the sidebar to center the map, inspecting emergency details, and updating emergency statuses.
+- **Announcements Stream**: Create/edit an announcement in Admin console. Confirm it instantly updates in the Resident app, and filter chips accurately filter by category.
+- **Header Cleanup**: Verify the search icon is removed from the Announcements header and Directory header.
+- **Notifications**: Create a new announcement or update a case status to Solved in the Admin console. Verify the resident's bell icon shows an unread badge, and tapping it opens the Notification screen.
+- **Directory**: Open Directory in Resident app. Verify real staff/admin profiles are displayed. Tap **Message** to open the real-time chat with 200-char limit, and tap **Call** to verify phone dialer trigger.

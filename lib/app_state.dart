@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide User;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'models/report.dart';
 import 'models/user.dart';
@@ -374,6 +376,90 @@ class AppState extends ChangeNotifier {
     await _firestore.collection('users').doc(user.id).set(user.toMap());
     _allUsers.add(user);
     notifyListeners();
+  }
+
+  Future<void> registerUser(User user) async {
+    await _firestore.collection('users').doc(user.id).set(user.toMap());
+    _allUsers.add(user);
+    _currentUser = user;
+    notifyListeners();
+  }
+
+  Future<String?> registerUserWithoutSigningOutAdmin(User user) async {
+    final cleanUsername = (user.username ?? '').trim().toLowerCase();
+
+    // Check if username/phone already registered
+    try {
+      final existingQuery = await _firestore.collection('users')
+          .where('username', isEqualTo: cleanUsername)
+          .get();
+
+      if (existingQuery.docs.isNotEmpty) {
+        return "This number/username is already registered.";
+      }
+    } catch (_) {}
+
+    try {
+      FirebaseApp secondaryApp;
+      try {
+        secondaryApp = Firebase.app('SecondaryAccountApp');
+      } catch (_) {
+        secondaryApp = await Firebase.initializeApp(
+          name: 'SecondaryAccountApp',
+          options: Firebase.app().options,
+        );
+      }
+
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      final internalEmail = '$cleanUsername@barangay.local';
+      final pass = (user.password != null && user.password!.length >= 6) ? user.password! : 'password123';
+
+      final credential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: internalEmail,
+        password: pass,
+      );
+
+      final finalUser = User(
+        id: credential.user?.uid ?? user.id,
+        name: user.name,
+        username: user.username,
+        role: user.role,
+        staffRole: user.staffRole,
+        purok: user.purok,
+        phoneNumber: user.phoneNumber,
+        isVerified: user.isVerified,
+        idImagePath: user.idImagePath,
+        faceData: user.faceData,
+        isArchived: user.isArchived,
+        password: user.password,
+      );
+
+      await _firestore.collection('users').doc(finalUser.id).set(finalUser.toMap());
+      _allUsers.add(finalUser);
+      if (finalUser.role == UserRole.staff || finalUser.role == UserRole.admin) {
+        _staffList.add(finalUser);
+      }
+
+      await secondaryAuth.signOut();
+
+      logActivity(
+        action: "Register User",
+        complaintId: "N/A",
+        description: "Registered ${finalUser.role.name.toUpperCase()}: ${finalUser.name} (${finalUser.username})"
+      );
+
+      notifyListeners();
+      return null;
+    } catch (e) {
+      // Fallback direct Firestore record creation
+      await _firestore.collection('users').doc(user.id).set(user.toMap());
+      _allUsers.add(user);
+      if (user.role == UserRole.staff || user.role == UserRole.admin) {
+        _staffList.add(user);
+      }
+      notifyListeners();
+      return null;
+    }
   }
 
   Future<void> addStaff({

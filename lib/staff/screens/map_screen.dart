@@ -52,6 +52,17 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  LatLng getReportCoordinates(Report r, int index) {
+    if (r.latitude != null && r.longitude != null) {
+      final point = LatLng(r.latitude!, r.longitude!);
+      if (_isWithinBarangay(point)) return point;
+    }
+    // Deterministic fallback inside Barangay Putho Tuntungin bounds
+    final lat = 14.1420 + ((index * 0.0035) % 0.0200);
+    final lng = 121.2420 + ((index * 0.0042) % 0.0200);
+    return LatLng(lat, lng);
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -120,7 +131,6 @@ class _MapScreenState extends State<MapScreen> {
                           initialZoom: 16.0,
                           minZoom: 14.0,
                           maxZoom: 19.0,
-                          // Requirement 2: Hard-lock panning using CameraConstraint.contain with LatLngBounds
                           cameraConstraint: CameraConstraint.contain(
                             bounds: _brgyBounds,
                           ),
@@ -138,7 +148,7 @@ class _MapScreenState extends State<MapScreen> {
                             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                             userAgentPackageName: 'com.example.barangaytest',
                           ),
-                          // Requirement 4: Barangay Boundary Polygon
+                          // Barangay Boundary Polygon
                           PolygonLayer(
                             polygons: [
                               Polygon(
@@ -153,21 +163,18 @@ class _MapScreenState extends State<MapScreen> {
                           // Incident Markers Layer
                           MarkerLayer(
                             markers: filteredReports.map((r) {
-                              // Generate deterministic simulated coordinates within Brgy Putho Tuntungin bounds for demonstration
                               final index = reports.indexOf(r);
-                              final lat = 14.1420 + ((index * 0.0035) % 0.0200);
-                              final lng = 121.2420 + ((index * 0.0042) % 0.0200);
-                              final point = LatLng(lat, lng);
-                              final isValid = _isWithinBarangay(point);
-
-                              if (!isValid) return null;
+                              final point = getReportCoordinates(r, index);
 
                               return Marker(
                                 point: point,
                                 width: 40,
                                 height: 40,
                                 child: GestureDetector(
-                                  onTap: () => setState(() => _selectedReport = r),
+                                  onTap: () {
+                                    _mapController.move(point, 16.5);
+                                    setState(() => _selectedReport = r);
+                                  },
                                   child: Tooltip(
                                     message: '${r.title} (${r.purok})',
                                     child: Container(
@@ -186,7 +193,7 @@ class _MapScreenState extends State<MapScreen> {
                                   ),
                                 ),
                               );
-                            }).whereType<Marker>().toList(),
+                            }).toList(),
                           ),
                         ],
                       ),
@@ -286,10 +293,14 @@ class _MapScreenState extends State<MapScreen> {
                             itemBuilder: (context, index) {
                               final r = filteredReports[index];
                               final isSelected = _selectedReport?.id == r.id;
+                              final point = getReportCoordinates(r, reports.indexOf(r));
                               return ListTile(
                                 selected: isSelected,
                                 selectedTileColor: PortalColors.primary.withValues(alpha: 0.06),
-                                onTap: () => setState(() => _selectedReport = r),
+                                onTap: () {
+                                  _mapController.move(point, 16.5);
+                                  setState(() => _selectedReport = r);
+                                },
                                 leading: Icon(
                                   r.isSOS ? Icons.warning_amber_rounded : Icons.fiber_manual_record_rounded,
                                   size: 16,

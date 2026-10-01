@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../app_state.dart';
-import '../../utils_validators.dart';
+import '../../validators.dart';
 import '../../models/user.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -271,15 +272,14 @@ class ProfileScreen extends StatelessWidget {
   }
 
   void _showEditProfile(BuildContext context, User user) {
+    final formKey = GlobalKey<FormState>();
     final nameCtrl = TextEditingController(text: user.name);
     final phoneCtrl = TextEditingController(text: user.phoneNumber);
-    String? nameError;
-    String? phoneError;
     
-    // Normalize purok value to match dropdown items (handle old lowercase data)
     final List<String> purokOptions = ['Purok 1', 'Purok 2', 'Purok 3', 'Purok 4', 'Purok 5', 'Purok 6'];
     String? selectedPurok;
-    
+    bool isSaving = false;
+
     if (user.purok.isNotEmpty) {
       selectedPurok = purokOptions.firstWhere(
         (p) => p.toLowerCase() == user.purok.toLowerCase(),
@@ -292,136 +292,142 @@ class ProfileScreen extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-            left: 24,
-            right: 24,
-            top: 12,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text('Update Profile', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
-              const SizedBox(height: 20),
-              _buildModalField(nameCtrl, 'Full Name', Icons.person_outline),
-              Builder(builder: (_) {
-                final err = UtilsValidators.validateName(nameCtrl.text);
-                return err == null ? const SizedBox.shrink() : Padding(
-                  padding: const EdgeInsets.only(top: 6, left: 4),
-                  child: Text(err, style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
-                );
-              }),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: selectedPurok,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.location_on_outlined, color: Color(0xFF94A3B8), size: 18),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
+        builder: (context, setModalState) {
+          final isFormValid = Validators.validateFullName(nameCtrl.text) == null &&
+              Validators.validatePhone(phoneCtrl.text) == null &&
+              selectedPurok != null;
+
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              left: 24,
+              right: 24,
+              top: 12,
+            ),
+            child: Form(
+              key: formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(10)),
                     ),
-                    items: purokOptions
-                        .map((p) => DropdownMenuItem(value: p, child: Text(p, style: const TextStyle(fontSize: 14))))
-                        .toList(),
-                    onChanged: (val) => setModalState(() => selectedPurok = val),
                   ),
-                ),
+                  const SizedBox(height: 24),
+                  const Text('Update Profile', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: nameCtrl,
+                    maxLength: 100,
+                    inputFormatters: [LengthLimitingTextInputFormatter(100)],
+                    decoration: const InputDecoration(
+                      labelText: 'Full Name *',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                    validator: (v) => Validators.validateFullName(v ?? ''),
+                    onChanged: (_) => setModalState(() {}),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: selectedPurok,
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.location_on_outlined, color: Color(0xFF94A3B8), size: 18),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        items: purokOptions
+                            .map((p) => DropdownMenuItem(value: p, child: Text(p, style: const TextStyle(fontSize: 14))))
+                            .toList(),
+                        onChanged: (val) => setModalState(() => selectedPurok = val),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: phoneCtrl,
+                    maxLength: 11,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(11),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Contact Number (09... 11 digits) *',
+                      prefixIcon: Icon(Icons.phone_android_outlined),
+                    ),
+                    validator: (v) => Validators.validatePhone(v ?? ''),
+                    onChanged: (_) => setModalState(() {}),
+                  ),
+                  const SizedBox(height: 28),
+                  ElevatedButton(
+                    onPressed: (isFormValid && !isSaving)
+                        ? () async {
+                            if (!formKey.currentState!.validate()) return;
+                            setModalState(() => isSaving = true);
+
+                            final updatedUser = User(
+                              id: user.id,
+                              name: nameCtrl.text.trim(),
+                              username: user.username,
+                              role: user.role,
+                              staffRole: user.staffRole,
+                              purok: selectedPurok!,
+                              phoneNumber: phoneCtrl.text.trim(),
+                              isVerified: user.isVerified,
+                              idImagePath: user.idImagePath,
+                              faceData: user.faceData,
+                              isArchived: user.isArchived,
+                              password: user.password,
+                            );
+
+                            await context.read<AppState>().updateUser(updatedUser);
+
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Profile updated successfully!')),
+                              );
+                            }
+                          }
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      disabledBackgroundColor: const Color(0xFFCBD5E1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              _buildModalField(phoneCtrl, 'Phone Number', Icons.phone_android_outlined, keyboardType: TextInputType.phone),
-              Builder(builder: (_) {
-                final err = UtilsValidators.validatePhone(phoneCtrl.text);
-                return err == null ? const SizedBox.shrink() : Padding(
-                  padding: const EdgeInsets.only(top: 6, left: 4),
-                  child: Text(err, style: TextStyle(color: Colors.red.shade700, fontSize: 12)),
-                );
-              }),
-              const SizedBox(height: 28),
-              ElevatedButton(
-                onPressed: () {
-                  final nameErr = UtilsValidators.validateName(nameCtrl.text);
-                                    final phoneErr = UtilsValidators.validatePhone(phoneCtrl.text);
-                  if (nameErr != null || phoneErr != null || selectedPurok == null) {
-                    setModalState(() {
-                      nameError = nameErr;
-                      phoneError = phoneErr;
-                    });
-                    return;
-                  }
-
-                  final updatedUser = User(
-                    id: user.id,
-                    name: nameCtrl.text,
-                    username: user.username,
-                    role: user.role,
-                    staffRole: user.staffRole,
-                    purok: selectedPurok!,
-                    phoneNumber: phoneCtrl.text,
-                    isVerified: user.isVerified,
-                    idImagePath: user.idImagePath,
-                    faceData: user.faceData,
-                    isArchived: user.isArchived,
-                    password: user.password,
-                  );
-                  context.read<AppState>().updateUser(updatedUser);
-                  Navigator.pop(context);
-                },
-
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  elevation: 0,
-                ),
-                child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModalField(TextEditingController ctrl, String hint, IconData icon, {TextInputType keyboardType = TextInputType.text}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: TextField(
-        controller: ctrl,
-        keyboardType: keyboardType,
-        style: const TextStyle(fontSize: 14, color: Color(0xFF0F172A)),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-          prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 18),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

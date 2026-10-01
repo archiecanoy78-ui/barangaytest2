@@ -12,6 +12,7 @@ import 'screens/resident_records_page.dart';
 import 'screens/system_settings_page.dart';
 import 'screens/map_screen.dart';
 import 'screens/emergency_map_page.dart';
+import 'screens/admin_messages_page.dart';
 
 class StaffMain extends StatefulWidget {
   const StaffMain({super.key});
@@ -30,15 +31,16 @@ class _StaffMainState extends State<StaffMain> {
     final isAdmin = user?.role == UserRole.admin;
 
     final List<Widget> pages = [
-      const DashboardScreen(),
-      const ComplaintListPage(),
-      const ResidentRecordsPage(),
-      if (isAdmin) const StaffManagementPage() else const Center(child: Text('Access Denied')),
-      const AnnouncementManagementPage(),
-      const MapScreen(),
-      const EmergencyMapPage(),
-      const ActivityLogsPage(),
-      const SystemSettingsPage(),
+      const DashboardScreen(), // 0
+      const ComplaintListPage(), // 1
+      const ResidentRecordsPage(), // 2
+      if (isAdmin) const StaffManagementPage() else const Center(child: Text('Access Denied')), // 3
+      const AdminMessagesPage(), // 4
+      const AnnouncementManagementPage(), // 5
+      const MapScreen(), // 6
+      const EmergencyMapPage(), // 7
+      const ActivityLogsPage(), // 8
+      const SystemSettingsPage(), // 9
     ];
 
     return AppScaffold(

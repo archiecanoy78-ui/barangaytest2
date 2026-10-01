@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import 'app_state.dart';
@@ -22,6 +23,9 @@ void main() async {
           storageBucket: "barangaytest-74ca2.firebasestorage.app",
         ),
       );
+      try {
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      } catch (_) {}
     } else {
       await Firebase.initializeApp();
     }

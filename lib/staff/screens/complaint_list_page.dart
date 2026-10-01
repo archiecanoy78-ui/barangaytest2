@@ -400,34 +400,6 @@ class _ComplaintListPageState extends State<ComplaintListPage> {
                             ),
                           ],
                         ),
-                        // Right-aligned Reset & Refresh
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.refresh_rounded, size: 18, color: PortalColors.textMuted),
-                              onPressed: _resetFilters,
-                              tooltip: 'Reset Filters',
-                            ),
-                            TextButton.icon(
-                              onPressed: _resetFilters,
-                              icon: const Icon(Icons.close_rounded, size: 16),
-                              label: const Text('Reset'),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              ),
-                              onPressed: () => _showDeleteAllConfirmationDialog(context),
-                              icon: const Icon(Icons.delete_sweep_rounded, size: 16),
-                              label: const Text('Delete All'),
-                            ),
-                          ],
-                        ),
                       ],
                     );
                   },
@@ -687,46 +659,6 @@ class _ComplaintListPageState extends State<ComplaintListPage> {
           ),
         ),
       ],
-    );
-  }
-
-  void _showDeleteAllConfirmationDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete All Complaints?', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-        content: const Text(
-          'This action is PERMANENT and cannot be undone. All resident complaints, emergency records, and tracking logs will be deleted from the database.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              try {
-                final appState = Provider.of<AppState>(context, listen: false);
-                await appState.deleteAllComplaints();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('All complaints have been deleted from the database.')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete complaints: $e')),
-                  );
-                }
-              }
-            },
-            child: const Text('Confirm Delete All'),
-          ),
-        ],
-      ),
     );
   }
 }

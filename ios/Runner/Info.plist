@@ -4,6 +4,12 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required for human liveness verification during registration.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>GPS location is required to share your precise position with emergency responders when filing an SOS alert.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>GPS location is required to share your precise position with emergency responders when filing an SOS alert.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

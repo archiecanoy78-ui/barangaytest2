@@ -1,9 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../app_state.dart';
 import '../../models/user.dart';
 import '../../models/report.dart';
+import '../../validators.dart';
+import '../../widgets/form_draft_helper.dart';
 
 class ResidentRecordsPage extends StatefulWidget {
   const ResidentRecordsPage({super.key});
@@ -184,7 +187,7 @@ class _ResidentRecordsPageState extends State<ResidentRecordsPage> {
                                       DataColumn(label: Text('Verification Status', style: TextStyle(fontWeight: FontWeight.bold))),
                                       DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                                     ],
-                                    rows: paginatedResidents.map((res) {
+                                    rows: paginatedResidents.map((User res) {
                                       final userReports = reports.where((r) =>
                                           r.complainantPhone == res.phoneNumber ||
                                           r.complainantName.toLowerCase() == res.name.toLowerCase()).toList();
@@ -356,112 +359,262 @@ class _ResidentRecordsPageState extends State<ResidentRecordsPage> {
     );
   }
 
-  void _showAddResidentDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
+  void _showAddResidentDialog(BuildContext context) async {
+    final appState = Provider.of<AppState>(context, listen: false);
+    final currentUid = appState.currentUser?.id ?? 'admin';
+    final draftHelper = FormDraftHelper(formKey: 'add_resident', uid: currentUid);
+
+    final firstNameCtrl = TextEditingController();
+    final lastNameCtrl = TextEditingController();
     final usernameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
     final purokCtrl = TextEditingController(text: 'Purok 1');
-    final passwordCtrl = TextEditingController(text: 'password');
+    final passwordCtrl = TextEditingController();
+
+    bool obscurePassword = true;
     bool isVerified = true;
     String? errorMsg;
 
+    // Load draft if available
+    final draft = await draftHelper.loadDraft();
+    if (draft != null) {
+      firstNameCtrl.text = draft['firstName']?.toString() ?? '';
+      lastNameCtrl.text = draft['lastName']?.toString() ?? '';
+      usernameCtrl.text = draft['username']?.toString() ?? '';
+      purokCtrl.text = draft['purok']?.toString() ?? 'Purok 1';
+    }
+
+    if (!context.mounted) return;
+
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setModalState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Add New Resident Record', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 420,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (errorMsg != null)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF2F2),
-                        borderRadius: BorderRadius.circular(8),
+        builder: (context, setModalState) {
+          void updateDraft() {
+            draftHelper.onFieldChanged({
+              'firstName': firstNameCtrl.text,
+              'lastName': lastNameCtrl.text,
+              'username': usernameCtrl.text,
+              'purok': purokCtrl.text,
+            });
+            setModalState(() {});
+          }
+
+          final pass = passwordCtrl.text;
+          final hasMinMax = pass.length >= 8;
+          final hasUpper = pass.contains(RegExp(r'[A-Z]'));
+          final hasLower = pass.contains(RegExp(r'[a-z]'));
+          final hasDigit = pass.contains(RegExp(r'[0-9]'));
+          final hasSpecial = pass.contains(RegExp(r'[^A-Za-z0-9]'));
+
+          final isFormValid =
+              Validators.validateFirstName(firstNameCtrl.text) == null &&
+              Validators.validateLastName(lastNameCtrl.text) == null &&
+              Validators.validateUsernameMobile(usernameCtrl.text) == null &&
+              Validators.validatePassword(passwordCtrl.text) == null;
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Add New Resident Record', style: TextStyle(fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: 440,
+                child: Form(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (errorMsg != null)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: firstNameCtrl,
+                              maxLength: 50,
+                              inputFormatters: [LengthLimitingTextInputFormatter(50)],
+                              decoration: const InputDecoration(labelText: 'First Name *', prefixIcon: Icon(Icons.person_outline)),
+                              validator: (v) => Validators.validateFirstName(v ?? ''),
+                              onChanged: (_) => updateDraft(),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: lastNameCtrl,
+                              maxLength: 50,
+                              inputFormatters: [LengthLimitingTextInputFormatter(50)],
+                              decoration: const InputDecoration(labelText: 'Last Name *', prefixIcon: Icon(Icons.person_outline)),
+                              validator: (v) => Validators.validateLastName(v ?? ''),
+                              onChanged: (_) => updateDraft(),
+                            ),
+                          ),
+                        ],
                       ),
-                      child: Text(errorMsg!, style: const TextStyle(color: Colors.red, fontSize: 12)),
-                    ),
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Full Name *', prefixIcon: Icon(Icons.person)),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: usernameCtrl,
+                        maxLength: 11,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(11),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Username (11-digit Mobile Number starting with 09) *',
+                          prefixIcon: Icon(Icons.phone_android_rounded),
+                        ),
+                        validator: (v) => Validators.validateUsernameMobile(v ?? ''),
+                        onChanged: (_) => updateDraft(),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: purokCtrl,
+                        decoration: const InputDecoration(labelText: 'Purok / Zone *', prefixIcon: Icon(Icons.location_on_outlined)),
+                        onChanged: (_) => updateDraft(),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: passwordCtrl,
+                        obscureText: obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Account Password *',
+                          prefixIcon: const Icon(Icons.lock_outline_rounded),
+                          suffixIcon: IconButton(
+                            icon: Icon(obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+                            onPressed: () => setModalState(() => obscurePassword = !obscurePassword),
+                          ),
+                        ),
+                        validator: (v) => Validators.validatePassword(v ?? ''),
+                        onChanged: (_) => updateDraft(),
+                      ),
+                      const SizedBox(height: 10),
+                      // Password Criteria Checklist
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _ruleItem('8+ characters long', hasMinMax),
+                            _ruleItem('At least one uppercase letter (A-Z)', hasUpper),
+                            _ruleItem('At least one lowercase letter (a-z)', hasLower),
+                            _ruleItem('At least one digit (0-9)', hasDigit),
+                            _ruleItem('At least one special character (!@#\$%^&*)', hasSpecial),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SwitchListTile(
+                        title: const Text('Mark as Verified Resident', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Allow direct complaint filing', style: TextStyle(fontSize: 11)),
+                        value: isVerified,
+                        onChanged: (val) => setModalState(() => isVerified = val),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: usernameCtrl,
-                    decoration: const InputDecoration(labelText: 'Username *', prefixIcon: Icon(Icons.account_circle)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: purokCtrl,
-                    decoration: const InputDecoration(labelText: 'Purok / Zone *', prefixIcon: Icon(Icons.location_on)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: phoneCtrl,
-                    decoration: const InputDecoration(labelText: 'Phone Number', prefixIcon: Icon(Icons.phone)),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passwordCtrl,
-                    decoration: const InputDecoration(labelText: 'Account Password *', prefixIcon: Icon(Icons.lock)),
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    title: const Text('Mark as Verified Resident'),
-                    subtitle: const Text('Allow direct complaint filing'),
-                    value: isVerified,
-                    onChanged: (val) => setModalState(() => isVerified = val),
-                  ),
-                ],
+                ),
               ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  final hasContent = firstNameCtrl.text.isNotEmpty || lastNameCtrl.text.isNotEmpty || usernameCtrl.text.isNotEmpty;
+                  if (hasContent) {
+                    final discard = await FormDraftHelper.showDiscardConfirmationDialog(context);
+                    if (discard) {
+                      await draftHelper.clearDraft();
+                      if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                    }
+                  } else {
+                    Navigator.pop(dialogCtx);
+                  }
+                },
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: isFormValid
+                    ? () async {
+                        final fullName = '${firstNameCtrl.text.trim()} ${lastNameCtrl.text.trim()}';
+                        final username = usernameCtrl.text.trim();
+                        final purok = purokCtrl.text.trim().isEmpty ? 'Purok 1' : purokCtrl.text.trim();
+                        final password = passwordCtrl.text;
+
+                        final newUser = User(
+                          id: 'res_${DateTime.now().millisecondsSinceEpoch}',
+                          name: fullName,
+                          username: username,
+                          role: UserRole.resident,
+                          purok: purok,
+                          phoneNumber: username,
+                          isVerified: isVerified,
+                          password: password,
+                        );
+
+                        final err = await appState.registerUserWithoutSigningOutAdmin(newUser);
+
+                        if (err != null) {
+                          setModalState(() => errorMsg = err);
+                          return;
+                        }
+
+                        await draftHelper.clearDraft();
+                        if (dialogCtx.mounted) {
+                          Navigator.pop(dialogCtx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Resident "$fullName" added successfully!')),
+                          );
+                        }
+                      }
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  disabledBackgroundColor: const Color(0xFFCBD5E1),
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Add Resident'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _ruleItem(String label, bool isMet) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            isMet ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            size: 13,
+            color: isMet ? Colors.green : const Color(0xFF94A3B8),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel'),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isMet ? const Color(0xFF15803D) : const Color(0xFF64748B),
+              fontWeight: isMet ? FontWeight.w600 : FontWeight.normal,
             ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameCtrl.text.trim();
-                final username = usernameCtrl.text.trim();
-                final phone = phoneCtrl.text.trim();
-                final purok = purokCtrl.text.trim();
-                final password = passwordCtrl.text.trim();
-
-                if (name.isEmpty || username.isEmpty || password.isEmpty) {
-                  setModalState(() => errorMsg = 'Please fill in Name, Username, and Password.');
-                  return;
-                }
-
-                await context.read<AppState>().addResident(
-                      name: name,
-                      username: username,
-                      purok: purok.isEmpty ? 'Purok 1' : purok,
-                      phoneNumber: phone.isEmpty ? 'N/A' : phone,
-                      password: password,
-                      isVerified: isVerified,
-                    );
-
-                if (dialogCtx.mounted) {
-                  Navigator.pop(dialogCtx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Resident "$name" added successfully!')),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
-              child: const Text('Add Resident'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

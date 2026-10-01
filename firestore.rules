@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isActiveUser() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active' &&
+        (!get(/databases/$(database)/documents/users/$(request.auth.uid)).data.keys().contains('isArchived') ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isArchived == false);
+    }
+
+    function isAdmin() {
+      return isActiveUser() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff');
+    }
+
+    // User Profile Rules
+    match /users/{userId} {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser() &&
+        request.resource.data.name.size() >= 3 &&
+        request.resource.data.name.size() <= 100 &&
+        request.resource.data.phoneNumber.matches('^09[0-9]{9}$');
+      allow delete: if isAdmin();
+    }
+
+    // Conversations & Real-Time Messaging Rules
+    match /conversations/{conversationId} {
+      allow read: if isActiveUser() &&
+        (isAdmin() || conversationId == request.auth.uid || resource.data.residentId == request.auth.uid);
+      allow create, update: if isActiveUser() &&
+        (isAdmin() || conversationId == request.auth.uid || request.resource.data.residentId == request.auth.uid);
+
+      match /messages/{messageId} {
+        allow read: if isActiveUser() &&
+          (isAdmin() || conversationId == request.auth.uid);
+        allow create: if isActiveUser() &&
+          (isAdmin() || conversationId == request.auth.uid) &&
+          request.resource.data.text.size() <= 200 &&
+          request.resource.data.senderId == request.auth.uid;
+        allow update: if isActiveUser() &&
+          (isAdmin() || conversationId == request.auth.uid);
+      }
+    }
+
+    // Reports & Incidents Rules
+    match /reports/{reportId} {
+      allow read: if isActiveUser();
+      allow create, update: if isActiveUser();
+      allow delete: if isAdmin();
+    }
+
+    // Settings Rules
+    match /settings/{settingId} {
+      allow read: if isActiveUser();
+      allow write: if isAdmin();
+    }
+
+    // Verification Logs Rules
+    match /verification_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isActiveUser();
+    }
+
+    // Activity Logs Rules
+    match /activity_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isActiveUser();
+    }
+  }
+}

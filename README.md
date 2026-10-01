@@ -32,3 +32,4 @@ The result was saved locally to `data/putho-tuntungin.geojson`, so the app does 
 - The default tiles are standard OpenStreetMap tiles with the required attribution: `© OpenStreetMap contributors`.
 - The optional Esri satellite layer is included for reference and matches the map style in the screenshot.
 - For production traffic, use a proper tile provider or a commercial mapping plan that complies with usage policies; avoid bulk scraping or unlicensed tile use.
+- **Logcat Filtering Note**: Google ML Kit inside Google Play Services outputs harmless `ThickFaceDetector` debug/info logs on Android. To filter out these lines in Android Studio Logcat, use the filter expression: `level:info -tag:ThickFaceDetector`.
