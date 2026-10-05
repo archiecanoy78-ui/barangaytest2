@@ -148,7 +148,7 @@ class _TrackComplaintState extends State<TrackComplaint> {
     Color color = const Color(0xFFF59E0B);
     if (status == ReportStatus.resolved) color = const Color(0xFF10B981);
     if (status == ReportStatus.rejected) color = const Color(0xFFEF4444);
-    if (status == ReportStatus.underReview) color = const Color(0xFF2563EB);
+    if (status == ReportStatus.under_investigation) color = const Color(0xFF2563EB);
     
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -168,9 +168,8 @@ class _TrackComplaintState extends State<TrackComplaint> {
     return Column(
       children: [
         _timelineItem('Submitted', 'Complaint successfully filed (Guest)', _isCompleted(ReportStatus.pending), true),
-        _timelineItem('Received by Barangay', 'Admin reviewed and logged submission', _isCompleted(ReportStatus.underReview), true),
-        _timelineItem('Under Investigation', 'Assigned to Barangay Response Team', _isCompleted(ReportStatus.underInvestigation), true),
-        _timelineItem('Action Taken', 'Community intervention in progress', _isCompleted(ReportStatus.actionRequired), true),
+        _timelineItem('Received by Barangay', 'Admin reviewed and logged submission', _isCompleted(ReportStatus.under_investigation), true),
+        _timelineItem('Under Investigation', 'Assigned to Barangay Response Team', _isCompleted(ReportStatus.under_investigation), true),
         _timelineItem('Resolved', 'Issue addressed and record finalized', _isCompleted(ReportStatus.resolved), false),
       ],
     );

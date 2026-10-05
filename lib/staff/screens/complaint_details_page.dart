@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../app_state.dart';
 import '../../models/report.dart';
 import '../../models/user.dart';
+import '../../constants/app_constants.dart';
 import '../widgets/portal_theme.dart';
 import '../widgets/status_badge.dart';
 
@@ -17,27 +18,55 @@ class ComplaintDetailsPage extends StatefulWidget {
 class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
   late ReportStatus _selectedStatus;
   String? _assignedStaffId;
+  bool _isSaving = false;
+  final TextEditingController _rejectionReasonController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _selectedStatus = widget.report.status;
     _assignedStaffId = widget.report.assignedToId;
+    _rejectionReasonController.text = widget.report.remarks;
   }
 
-  void _saveUpdate() {
-    context.read<AppState>().updateReportStatus(
-      widget.report.id,
-      _selectedStatus,
-    );
-    if (_assignedStaffId != null) {
-      context.read<AppState>().assignStaff(widget.report.id, _assignedStaffId!);
-    }
-    if (mounted) {
+  @override
+  void dispose() {
+    _rejectionReasonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveUpdate() async {
+    if (_selectedStatus == ReportStatus.rejected && _rejectionReasonController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Complaint updated & officer dispatched successfully.')),
+        const SnackBar(content: Text('Please provide the rejection reason before saving.')),
       );
-      Navigator.pop(context);
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await context.read<AppState>().updateReportStatus(
+        widget.report.id,
+        _selectedStatus,
+        rejectionReason: _rejectionReasonController.text.trim(),
+      );
+      if (_assignedStaffId != null && _assignedStaffId != widget.report.assignedToId) {
+        await context.read<AppState>().assignStaff(widget.report.id, _assignedStaffId!);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Complaint updated successfully.')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update complaint: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -193,11 +222,23 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
                                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: PortalColors.border)),
                                       ),
-                                      items: ReportStatus.values.map((s) => DropdownMenuItem(value: s, child: Text(s.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)))).toList(),
+                                      items: ReportStatusExtension.canonicalValues.map((s) => DropdownMenuItem(value: s, child: Text(s.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)))).toList(),
                                       onChanged: (v) {
                                         if (v != null) setState(() => _selectedStatus = v);
                                       },
                                     ),
+                                    if (_selectedStatus == ReportStatus.rejected) ...[
+                                      const SizedBox(height: 12),
+                                      TextField(
+                                        controller: _rejectionReasonController,
+                                        minLines: 2,
+                                        maxLines: 3,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Rejection reason',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -294,9 +335,9 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
                                   children: [
                                     const Text('LOCATION & CATEGORY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: PortalColors.textMuted)),
                                     const SizedBox(height: 12),
-                                    Text('${currentReport.category} • ${currentReport.purok.isNotEmpty ? currentReport.purok : 'Purok 5'}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: PortalColors.textDark)),
+                                    Text('${AppConstants.normalizeCategory(currentReport.category)} • ${AppConstants.normalizePurok(currentReport.purok)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: PortalColors.textDark)),
                                     const SizedBox(height: 2),
-                                    Text(currentReport.incidentLocation.isNotEmpty ? currentReport.incidentLocation : 'Main Area, Purok 5', style: const TextStyle(fontSize: 11, color: PortalColors.textMuted)),
+                                    Text(currentReport.incidentLocation.isNotEmpty ? currentReport.incidentLocation : 'Incident Area (${AppConstants.normalizePurok(currentReport.purok)})', style: const TextStyle(fontSize: 11, color: PortalColors.textMuted)),
                                   ],
                                 ),
                               ),
@@ -421,9 +462,9 @@ class _ComplaintDetailsPageState extends State<ComplaintDetailsPage> {
                         child: const Text('Close'),
                       ),
                       ElevatedButton.icon(
-                        onPressed: _saveUpdate,
+                        onPressed: _isSaving ? null : _saveUpdate,
                         icon: const Icon(Icons.check_rounded, size: 18),
-                        label: const Text('Save & Dispatch Officer'),
+                        label: Text(_isSaving ? 'Saving...' : 'Save & Dispatch Officer'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF4F46E5),
                           foregroundColor: Colors.white,

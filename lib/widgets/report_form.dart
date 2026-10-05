@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_state.dart';
+import '../constants/app_constants.dart';
 import '../models/report.dart';
 import '../models/user.dart';
 import '../utils_validators.dart';
@@ -14,7 +15,7 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
   final titleController = TextEditingController();
   final descController = TextEditingController();
   final contactController = TextEditingController();
-  String category = initialCategory;
+  String category = AppConstants.normalizeCategory(initialCategory);
   bool hasMedia = false;
   bool simulatingChecks = false;
 
@@ -24,7 +25,7 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
     descController.text = draft['description']?.toString() ?? '';
     contactController.text = draft['contact']?.toString() ?? '';
     if (draft['category'] != null) {
-      category = draft['category'].toString();
+      category = AppConstants.normalizeCategory(draft['category'].toString());
     }
   }
 
@@ -94,15 +95,17 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  initialValue: Provider.of<AppState>(context, listen: false).categories.contains(category)
+                  value: AppConstants.categories.contains(category)
                       ? category
-                      : Provider.of<AppState>(context, listen: false).categories.first,
-                  items: Provider.of<AppState>(context).categories
+                      : AppConstants.categories.first,
+                  items: AppConstants.categories
                       .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                       .toList(),
                   onChanged: (val) {
-                    category = val!;
-                    updateDraft();
+                    if (val != null) {
+                      setState(() => category = val);
+                      updateDraft();
+                    }
                   },
                   decoration: InputDecoration(
                     labelText: 'Category',
@@ -159,9 +162,16 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
                 ElevatedButton.icon(
                   onPressed: simulatingChecks ? null : () async {
                     final appState = context.read<AppState>();
-                    final user = appState.currentUser!;
+                    final user = appState.currentUser;
                     
-                    if (user.role == UserRole.guest && !hasMedia) {
+                    if (titleController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please enter a title for the report.')),
+                      );
+                      return;
+                    }
+
+                    if (user?.role == UserRole.guest && !hasMedia) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Mandatory: Anonymous reports must include visual proof.'),
@@ -171,9 +181,9 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
                       return;
                     }
 
-                    if (descController.text.length < 10) {
+                    if (descController.text.trim().length < 10) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Description is too short.')),
+                        const SnackBar(content: Text('Description is too short (minimum 10 characters).')),
                       );
                       return;
                     }
@@ -189,47 +199,31 @@ void showReportForm(BuildContext context, {String initialCategory = 'Waste Manag
                     setState(() => simulatingChecks = true);
                     await Future.delayed(const Duration(seconds: 1));
 
-                    bool isDuplicate = appState.reports.any((r) => r.description == descController.text);
+                    bool isDuplicate = appState.reports.any((r) => r.description == descController.text.trim());
 
-                    final isGuest = user.role == UserRole.guest;
+                    final isGuest = user == null || user.role == UserRole.guest;
+                    final rawPurok = user?.purok ?? 'Purok 1';
+                    final finalPurok = AppConstants.normalizePurok(rawPurok);
+
                     final report = Report(
                       id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      title: titleController.text,
-                      category: category,
-                      description: descController.text,
-                      purok: user.purok == 'Unknown' || user.purok.isEmpty ? 'Purok 1' : user.purok,
+                      title: titleController.text.trim(),
+                      category: AppConstants.normalizeCategory(category),
+                      description: descController.text.trim(),
+                      purok: finalPurok,
                       timestamp: DateTime.now(),
-                      reporterId: user.id,
+                      reporterId: user?.id,
                       complainantName: isGuest ? '' : user.name,
-                      complainantPhone: isGuest ? contactController.text : user.phoneNumber,
+                      complainantPhone: isGuest ? contactController.text.trim() : user.phoneNumber,
                       complainantEmail: null,
                       isAnonymous: isGuest,
                       hasMedia: hasMedia,
                       metadataValid: true,
                       isPotentialDuplicate: isDuplicate,
-                      contactInfo: isGuest ? contactController.text : user.phoneNumber,
-                    );
-                    
-                    final finalReport = Report(
-                      id: report.id,
-                      title: report.title,
-                      category: report.category,
-                      description: report.description,
-                      purok: report.purok,
-                      timestamp: report.timestamp,
-                      reporterId: report.reporterId,
-                      complainantName: report.complainantName,
-                      complainantPhone: report.complainantPhone,
-                      complainantEmail: report.complainantEmail,
-                      isAnonymous: report.isAnonymous,
-                      hasMedia: report.hasMedia,
-                      metadataValid: report.metadataValid,
-                      isPotentialDuplicate: report.isPotentialDuplicate,
-                      riskScore: appState.calculateRisk(report),
-                      contactInfo: report.contactInfo,
+                      contactInfo: isGuest ? contactController.text.trim() : user.phoneNumber,
                     );
 
-                    appState.addReport(finalReport);
+                    await appState.addReport(report);
                     await draftHelper.clearDraft();
 
                     if (context.mounted) Navigator.pop(context);

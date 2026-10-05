@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../app_state.dart';
 import '../../models/report.dart';
 import '../../utils_validators.dart';
-
+import '../../constants/app_constants.dart';
 import '../../models/user.dart';
 
 class ComplaintForm extends StatefulWidget {
@@ -20,16 +20,16 @@ class _ComplaintFormState extends State<ComplaintForm> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
-  
+
   String? _selectedCategory;
+  String? _selectedPurok;
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _locationController = TextEditingController();
-  final _purokController = TextEditingController();
-  
+
   DateTime _incidentDate = DateTime.now();
   TimeOfDay _incidentTime = TimeOfDay.now();
-  
+
   bool _isSubmitting = false;
 
   @override
@@ -39,18 +39,47 @@ class _ComplaintFormState extends State<ComplaintForm> {
     if (user != null && user.role != UserRole.guest) {
       _nameController.text = user.name;
       _phoneController.text = user.phoneNumber;
-      _purokController.text = user.purok;
+      _selectedPurok = AppConstants.normalizePurok(user.purok);
     }
   }
 
   void _nextStep() {
-    if (_currentStep < 4) {
-      if (_currentStep == 1) {
-        if (_nameController.text.isEmpty || UtilsValidators.validatePhone(_phoneController.text) != null) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all required fields correctly.')));
-          return;
-        }
+    if (_currentStep == 1) {
+      if (_nameController.text.trim().isEmpty ||
+          UtilsValidators.validatePhone(_phoneController.text) != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please fill all required personal details correctly.')),
+        );
+        return;
       }
+    } else if (_currentStep == 2) {
+      if (_selectedCategory == null || _selectedCategory!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a valid complaint category.')),
+        );
+        return;
+      }
+      if (_titleController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a brief complaint title.')),
+        );
+        return;
+      }
+      if (_descriptionController.text.trim().length < 10) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a detailed description (at least 10 characters).')),
+        );
+        return;
+      }
+      if (_selectedPurok == null || _selectedPurok!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a valid Purok / Zone.')),
+        );
+        return;
+      }
+    }
+
+    if (_currentStep < 4) {
       setState(() => _currentStep++);
     }
   }
@@ -60,34 +89,49 @@ class _ComplaintFormState extends State<ComplaintForm> {
   }
 
   Future<void> _submit() async {
+    if (_selectedCategory == null || _selectedCategory!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Category selection is mandatory.')),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     final appState = context.read<AppState>();
     final user = appState.currentUser;
     final isGuest = user == null || user.role == UserRole.guest;
-    
+
     final report = Report(
       id: appState.generateComplaintId(),
-      title: _titleController.text,
-      category: _selectedCategory ?? 'Other',
-      description: _descriptionController.text,
-      incidentLocation: _locationController.text,
-      incidentDateTime: DateTime(_incidentDate.year, _incidentDate.month, _incidentDate.day, _incidentTime.hour, _incidentTime.minute),
-      purok: _purokController.text.isNotEmpty ? _purokController.text : (user?.purok ?? 'Purok 1'),
-      complainantName: _nameController.text,
-      complainantPhone: _phoneController.text,
-      complainantEmail: _emailController.text.isEmpty ? null : _emailController.text,
+      title: _titleController.text.trim(),
+      category: AppConstants.normalizeCategory(_selectedCategory!),
+      description: _descriptionController.text.trim(),
+      incidentLocation: _locationController.text.trim(),
+      incidentDateTime: DateTime(
+        _incidentDate.year,
+        _incidentDate.month,
+        _incidentDate.day,
+        _incidentTime.hour,
+        _incidentTime.minute,
+      ),
+      purok: AppConstants.normalizePurok(_selectedPurok ?? 'Purok 1'),
+      complainantName: _nameController.text.trim(),
+      complainantPhone: _phoneController.text.trim(),
+      complainantEmail: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
       timestamp: DateTime.now(),
       status: ReportStatus.pending,
       reporterId: user?.id,
       isAnonymous: isGuest,
-      contactInfo: _phoneController.text,
+      contactInfo: _phoneController.text.trim(),
     );
 
     try {
       final id = await appState.submitComplaint(report);
       if (mounted) _showSuccessDialog(id);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -262,39 +306,45 @@ class _ComplaintFormState extends State<ComplaintForm> {
   }
 
   Widget _step2Description() {
-    final categories = context.watch<AppState>().categories;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Incident Description', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 20),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Complaint Category', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Complaint Category *', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedCategory,
-                    items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                    value: _selectedCategory,
+                    items: AppConstants.categories
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
                     onChanged: (v) => setState(() => _selectedCategory = v),
-                    decoration: const InputDecoration(hintText: 'Select category'),
+                    decoration: const InputDecoration(
+                      hintText: 'Select category',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 20),
-            Expanded(child: _textField('Location', _locationController, hint: 'Barangay, Purok / Exact location')),
+            Expanded(child: _textField('Exact Location / Landmark', _locationController, hint: 'Main Road near Chapel')),
           ],
         ),
         const SizedBox(height: 20),
-        _textField('Complaint Title', _titleController, hint: 'Brief title of the issue'),
+        _textField('Complaint Title *', _titleController, hint: 'Brief title of the issue'),
         const SizedBox(height: 20),
-        _textField('Description', _descriptionController, hint: 'Describe the issue in detail...', lines: 4),
+        _textField('Detailed Description *', _descriptionController, hint: 'Describe the issue in detail...', lines: 4),
         const SizedBox(height: 20),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Column(
@@ -304,7 +354,12 @@ class _ComplaintFormState extends State<ComplaintForm> {
                   const SizedBox(height: 8),
                   InkWell(
                     onTap: () async {
-                      final picked = await showDatePicker(context: context, initialDate: _incidentDate, firstDate: DateTime(2020), lastDate: DateTime.now());
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _incidentDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                      );
                       if (picked != null) setState(() => _incidentDate = picked);
                     },
                     child: Container(
@@ -323,7 +378,26 @@ class _ComplaintFormState extends State<ComplaintForm> {
               ),
             ),
             const SizedBox(width: 20),
-            Expanded(child: _textField('Purok / Zone', _purokController, hint: 'Purok 1, Zone A')),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Purok / Zone *', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _selectedPurok,
+                    items: AppConstants.purokOptions
+                        .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _selectedPurok = v),
+                    decoration: const InputDecoration(
+                      hintText: 'Select Purok',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ],
@@ -366,7 +440,8 @@ class _ComplaintFormState extends State<ComplaintForm> {
         const SizedBox(height: 20),
         _reviewRow('Name', _nameController.text),
         _reviewRow('Phone', _phoneController.text),
-        _reviewRow('Category', _selectedCategory ?? 'Other'),
+        _reviewRow('Category', _selectedCategory ?? 'Not selected'),
+        _reviewRow('Purok', _selectedPurok ?? 'Not selected'),
         _reviewRow('Title', _titleController.text),
         _reviewRow('Location', _locationController.text),
         _reviewRow('Date', "${_incidentDate.toLocal()}".split(' ')[0]),

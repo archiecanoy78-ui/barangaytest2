@@ -112,7 +112,7 @@ class EmergencyBanner extends StatelessWidget {
               leading: const Icon(Icons.send, size: 16),
               title: Text(team, style: const TextStyle(fontSize: 13)),
               onTap: () {
-                appState.updateReportStatus(sos.id, ReportStatus.assigned);
+                appState.updateReportStatus(sos.id, ReportStatus.under_investigation);
                 appState.addRemarks(sos.id, 'Dispatched: $team');
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Dispatched $team to Purok ${sos.purok}')));

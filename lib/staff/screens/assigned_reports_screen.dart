@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../app_state.dart';
 import '../../models/report.dart';
+import '../../constants/app_constants.dart';
 
 class AssignedReportsScreen extends StatefulWidget {
   const AssignedReportsScreen({super.key});
@@ -225,18 +226,13 @@ class _AssignedReportsScreenState extends State<AssignedReportsScreen> {
       case ReportStatus.pending:
         color = Colors.orange;
         break;
-      case ReportStatus.underReview:
-      case ReportStatus.underInvestigation:
-      case ReportStatus.actionRequired:
-      case ReportStatus.assigned:
-      case ReportStatus.inProgress:
+      case ReportStatus.under_investigation:
         color = Colors.indigo;
         break;
       case ReportStatus.resolved:
         color = Colors.green;
         break;
       case ReportStatus.rejected:
-      case ReportStatus.closed:
         color = Colors.grey;
         break;
     }
@@ -332,7 +328,7 @@ class _AssignedReportsScreenState extends State<AssignedReportsScreen> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () {
-                      appState.updateReportStatus(report.id, ReportStatus.inProgress);
+                      appState.updateReportStatus(report.id, ReportStatus.under_investigation);
                       appState.addRemarks(report.id, remarksController.text);
                       Navigator.pop(context);
                     },
@@ -386,17 +382,22 @@ class _AssignedReportsScreenState extends State<AssignedReportsScreen> {
   Widget _buildDispatchSelector(BuildContext context, Report report) {
     final appState = context.read<AppState>();
 
+    final normalizedCategory = AppConstants.normalizeCategory(report.category);
+
     final Map<String, List<String>> dispatchOptions = {
       'Waste Management': ['Sanitation Team', 'Maintenance'],
       'Noise Complaint': ['Tanod Patrol', 'Police Assistance'],
+      'Road / Infrastructure': ['Engineering Team', 'Public Works'],
+      'Drainage / Flooding': ['Engineering Team', 'Drainage Response'],
+      'Street Lighting': ['Electrician Team', 'Maintenance'],
       'Public Safety': ['Tanod Group A', 'PNP Station'],
-      'Health': ['Health Workers', 'Ambulance'],
-      'Infrastructure': ['Engineering Team', 'Public Works'],
-      'Emergency': ['Rescue Team', 'Fire Dept'],
-      'Others': ['General Staff', 'Secretary'],
+      'Animal Concern': ['Veterinary Services', 'Pound Response'],
+      'Neighborhood Dispute': ['Lupon Tagapamayapa', 'Tanod Patrol'],
+      'Emergency / SOS': ['Rescue Team', 'Fire Dept', 'Ambulance'],
+      'Other / General': ['General Staff', 'Barangay Secretary'],
     };
 
-    final suggestions = dispatchOptions[report.category] ?? dispatchOptions['Others']!;
+    final suggestions = dispatchOptions[normalizedCategory] ?? dispatchOptions['Other / General']!;
 
     return Column(
       children: suggestions
@@ -406,7 +407,7 @@ class _AssignedReportsScreenState extends State<AssignedReportsScreen> {
                 title: Text(team),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
-                  appState.updateReportStatus(report.id, ReportStatus.assigned);
+                  appState.updateReportStatus(report.id, ReportStatus.under_investigation);
                   appState.addRemarks(report.id, 'Dispatched: $team');
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Dispatched $team to Purok ${report.purok}')));

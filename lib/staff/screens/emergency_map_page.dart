@@ -63,15 +63,12 @@ class _EmergencyMapPageState extends State<EmergencyMapPage> {
     switch (status) {
       case ReportStatus.pending:
         return Colors.red; // 🔴 New/Pending
-      case ReportStatus.underReview:
-        return Colors.amber.shade700; // 🟡 Acknowledged
-      case ReportStatus.inProgress:
-      case ReportStatus.assigned:
+      case ReportStatus.under_investigation:
         return Colors.blue; // 🔵 Responding
       case ReportStatus.resolved:
         return Colors.green; // 🟢 Resolved
-      default:
-        return Colors.grey; // ⚪ Cancelled / Closed
+      case ReportStatus.rejected:
+        return Colors.grey; // ⚪ Rejected
     }
   }
 

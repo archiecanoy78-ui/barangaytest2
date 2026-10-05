@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../app_state.dart';
 import '../../models/report.dart';
 import '../../models/user.dart';
+import '../../constants/app_constants.dart';
 import '../widgets/portal_theme.dart';
 import '../widgets/page_header.dart';
 import '../widgets/status_badge.dart';
@@ -107,6 +108,7 @@ class _ComplaintListPageState extends State<ComplaintListPage> {
     ReportStatus selectedStatus = report.status;
     String? assignedStaffId = report.assignedToId;
     final staffList = appState.staffList;
+    final rejectionController = TextEditingController(text: report.remarks);
 
     showDialog(
       context: context,
@@ -160,13 +162,22 @@ class _ComplaintListPageState extends State<ComplaintListPage> {
                               value: selectedStatus,
                               isExpanded: true,
                               decoration: const InputDecoration(labelText: 'Update Status'),
-                              items: ReportStatus.values.map((status) => DropdownMenuItem(value: status, child: Text(status.label, overflow: TextOverflow.ellipsis))).toList(),
+                              items: ReportStatusExtension.canonicalValues.map((status) => DropdownMenuItem(value: status, child: Text(status.label, overflow: TextOverflow.ellipsis))).toList(),
                               onChanged: (value) {
                                 if (value != null) {
                                   setDialogState(() => selectedStatus = value);
                                 }
                               },
                             ),
+                            if (selectedStatus == ReportStatus.rejected) ...[
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: rejectionController,
+                                minLines: 2,
+                                maxLines: 3,
+                                decoration: const InputDecoration(labelText: 'Rejection Reason'),
+                              ),
+                            ],
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
                               value: assignedStaffId,
@@ -229,14 +240,33 @@ class _ComplaintListPageState extends State<ComplaintListPage> {
                           ),
                           const SizedBox(width: 12),
                           ElevatedButton(
-                            onPressed: () {
-                              context.read<AppState>().updateReportStatus(report.id, selectedStatus);
-                              if (assignedStaffId != null) {
-                                context.read<AppState>().assignStaff(report.id, assignedStaffId!);
+                            onPressed: () async {
+                              if (selectedStatus == ReportStatus.rejected && rejectionController.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please provide the rejection reason before saving.')),
+                                );
+                                return;
                               }
-                              Navigator.of(dialogContext).pop();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Complaint updated successfully.')));
+
+                              try {
+                                await context.read<AppState>().updateReportStatus(
+                                  report.id,
+                                  selectedStatus,
+                                  rejectionReason: rejectionController.text.trim(),
+                                );
+                                if (assignedStaffId != null && assignedStaffId != report.assignedToId) {
+                                  await context.read<AppState>().assignStaff(report.id, assignedStaffId!);
+                                }
+                                if (context.mounted) {
+                                  Navigator.of(dialogContext).pop();
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Complaint updated successfully.')));
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed to update complaint: $e')),
+                                  );
+                                }
                               }
                             },
                             child: const Text('Save Changes'),
@@ -257,8 +287,8 @@ class _ComplaintListPageState extends State<ComplaintListPage> {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
-    final categories = appState.categories;
-    final purokOptions = ['Purok 1', 'Purok 2', 'Purok 3', 'Purok 4', 'Purok 5', 'Purok 6'];
+    final categories = AppConstants.categories;
+    final purokOptions = AppConstants.purokOptions;
 
     List<Report> filteredReports = appState.reports.where((r) {
       final resolvedComplainantName = _resolveComplainantName(appState, r);
@@ -270,8 +300,10 @@ class _ComplaintListPageState extends State<ComplaintListPage> {
           r.id.toLowerCase().contains(_searchQuery.toLowerCase());
 
       final matchesStatus = _filterStatus == null || r.status == _filterStatus;
-      final matchesCategory = _filterCategory == null || r.category == _filterCategory;
-      final matchesPurok = _filterPurok == null || r.purok == _filterPurok;
+      final normCategory = AppConstants.normalizeCategory(r.category);
+      final normPurok = AppConstants.normalizePurok(r.purok);
+      final matchesCategory = _filterCategory == null || normCategory == _filterCategory;
+      final matchesPurok = _filterPurok == null || normPurok == _filterPurok;
 
       return matchesSearch && matchesStatus && matchesCategory && matchesPurok;
     }).toList();

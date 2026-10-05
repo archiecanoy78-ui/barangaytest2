@@ -60,18 +60,11 @@ class StatusBadge extends StatelessWidget {
     switch (st) {
       case ReportStatus.pending:
         return const Color(0xFFFEF3C7);
-      case ReportStatus.underReview:
-      case ReportStatus.assigned:
-        return const Color(0xFFDBEAFE);
-      case ReportStatus.underInvestigation:
+      case ReportStatus.under_investigation:
         return const Color(0xFFEDE9FE);
-      case ReportStatus.inProgress:
-      case ReportStatus.actionRequired:
-        return const Color(0xFFFFEDD5);
       case ReportStatus.resolved:
         return const Color(0xFFDCFCE7);
       case ReportStatus.rejected:
-      case ReportStatus.closed:
         return const Color(0xFFF1F5F9);
     }
   }
@@ -81,18 +74,11 @@ class StatusBadge extends StatelessWidget {
     switch (st) {
       case ReportStatus.pending:
         return const Color(0xFFB45309);
-      case ReportStatus.underReview:
-      case ReportStatus.assigned:
-        return const Color(0xFF1D4ED8);
-      case ReportStatus.underInvestigation:
+      case ReportStatus.under_investigation:
         return const Color(0xFF6D28D9);
-      case ReportStatus.inProgress:
-      case ReportStatus.actionRequired:
-        return const Color(0xFFC2410C);
       case ReportStatus.resolved:
         return const Color(0xFF15803D);
       case ReportStatus.rejected:
-      case ReportStatus.closed:
         return const Color(0xFF475569);
     }
   }

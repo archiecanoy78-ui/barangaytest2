@@ -23,91 +23,157 @@ class NeedsAttentionStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: PortalColors.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: PortalColors.border),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0A000000),
-            blurRadius: 12,
-            offset: Offset(0, 1),
+            blurRadius: 10,
+            offset: Offset(0, 2),
           ),
         ],
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF1F2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.insights_rounded, color: PortalColors.danger, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Needs Attention',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: PortalColors.textDark),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 768;
+
+          Widget headerSection = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: PortalColors.dangerBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: PortalColors.dangerBorder.withOpacity(0.5)),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Priority follow-ups and action items requiring a response this week.',
-                  style: const TextStyle(fontSize: 12, color: PortalColors.textMuted),
+                child: const Icon(Icons.insights_rounded, color: PortalColors.danger, size: 20),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Text(
+                      'Needs Attention',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: PortalColors.textDark,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Priority follow-ups requiring prompt barangay staff action.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: PortalColors.textMuted,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
+              ),
+            ],
+          );
+
+          Widget chipsSection = Wrap(
+            spacing: 10,
+            runSpacing: 10,
             children: items.map((item) {
-              return InkWell(
-                onTap: item.onTap,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: item.color.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: item.color.withOpacity(0.18)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: item.color,
-                          shape: BoxShape.circle,
+              return Tooltip(
+                message: '${item.count} ${item.label} incidents requiring attention',
+                child: InkWell(
+                  onTap: item.onTap,
+                  borderRadius: BorderRadius.circular(12),
+                  mouseCursor: SystemMouseCursors.click,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    constraints: const BoxConstraints(minHeight: 38),
+                    decoration: BoxDecoration(
+                      color: item.color.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: item.color.withOpacity(0.25)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: item.color,
+                            shape: BoxShape.circle,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${item.count}',
-                        style: TextStyle(color: item.color, fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        item.label,
-                        style: TextStyle(color: item.color, fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Text(
+                          '${item.count}',
+                          style: TextStyle(
+                            color: item.color,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            item.label,
+                            style: TextStyle(
+                              color: item.color,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
             }).toList(),
-          ),
-        ],
+          );
+
+          if (isNarrow) {
+            // Stack vertically on narrow containers/mobile/tablet
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                headerSection,
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: chipsSection,
+                ),
+              ],
+            );
+          } else {
+            // Horizontal layout on wide desktop containers
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: headerSection,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  flex: 3,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: chipsSection,
+                  ),
+                ),
+              ],
+            );
+          }
+        },
       ),
     );
   }

@@ -247,18 +247,13 @@ class _PaginatedReportListState extends State<PaginatedReportList> {
       case ReportStatus.pending:
         icon = Icons.hourglass_empty;
         break;
-      case ReportStatus.underReview:
-      case ReportStatus.underInvestigation:
-      case ReportStatus.actionRequired:
-      case ReportStatus.assigned:
-      case ReportStatus.inProgress:
+      case ReportStatus.under_investigation:
         icon = Icons.engineering;
         break;
       case ReportStatus.resolved:
         icon = Icons.check_circle_outline;
         break;
       case ReportStatus.rejected:
-      case ReportStatus.closed:
         icon = Icons.archive_outlined;
         break;
     }
@@ -269,16 +264,11 @@ class _PaginatedReportListState extends State<PaginatedReportList> {
     switch (status) {
       case ReportStatus.pending:
         return Colors.orange;
-      case ReportStatus.underReview:
-      case ReportStatus.underInvestigation:
-      case ReportStatus.actionRequired:
-      case ReportStatus.assigned:
-      case ReportStatus.inProgress:
+      case ReportStatus.under_investigation:
         return Colors.indigo;
       case ReportStatus.resolved:
         return Colors.green;
       case ReportStatus.rejected:
-      case ReportStatus.closed:
         return Colors.grey;
     }
   }

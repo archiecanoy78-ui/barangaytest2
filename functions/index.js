@@ -41,18 +41,23 @@ exports.onAnnouncementCreated = functions.firestore
         .firestore()
         .collection("users")
         .where("role", "==", "resident")
-        .where("status", "==", "active")
         .get();
 
       const batch = admin.firestore().batch();
       activeResidents.docs.forEach((doc) => {
         const notifRef = doc.ref.collection("notifications").doc();
         batch.set(notifRef, {
-          title: title,
-          body: body,
+          id: notifRef.id,
+          user_id: doc.id,
           type: "announcement",
+          title: title,
+          message: body,
+          body: body,
+          reference_id: context.params.announcementId,
           referenceId: context.params.announcementId,
+          is_read: false,
           isRead: false,
+          created_at: admin.firestore.FieldValue.serverTimestamp(),
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
       });
@@ -67,51 +72,105 @@ exports.onAnnouncementCreated = functions.firestore
 
 /**
  * Cloud Function Trigger: On Report / Case Status Updated
- * Notifies only the resident who submitted the report when status changes.
+ * Notifies only the resident who submitted the report when the report transitions to Resolved or Rejected.
  */
+function normalizeStatus(value) {
+  if (!value || typeof value !== "string") return "pending";
+  const key = value.trim().toLowerCase().replace(/[-\s]+/g, "_");
+  const map = {
+    pending: "pending",
+    under_investigation: "under_investigation",
+    underinvestigation: "under_investigation",
+    under_review: "under_investigation",
+    underreview: "under_investigation",
+    in_progress: "under_investigation",
+    inprogress: "under_investigation",
+    assigned: "under_investigation",
+    action_required: "under_investigation",
+    actionrequired: "under_investigation",
+    resolved: "resolved",
+    rejected: "rejected",
+    closed: "resolved",
+  };
+  return map[key] || "pending";
+}
+
 exports.onReportStatusUpdated = functions.firestore
   .document("reports/{reportId}")
   .onUpdate(async (change, context) => {
-    const beforeData = change.before.data();
-    const afterData = change.after.data();
-
-    // Prevent duplicate notification if status didn't change
-    if (beforeData.status === afterData.status) return null;
-
+    const beforeData = change.before.data() || {};
+    const afterData = change.after.data() || {};
     const reporterUid = afterData.reporterId;
     if (!reporterUid) return null;
 
-    const newStatus = afterData.status || "Updated";
-    const reportTitle = afterData.title || "Incident Report";
+    const previousStatus = normalizeStatus(beforeData.status);
+    const nextStatus = normalizeStatus(afterData.status);
+    const reportId = context.params.reportId;
 
-    const title = `Case Status Update: ${newStatus}`;
-    const body = `Your report "${reportTitle}" has been marked as ${newStatus}.`;
+    if (previousStatus === nextStatus) {
+      return null;
+    }
+
+    if (nextStatus !== "resolved" && nextStatus !== "rejected") {
+      return null;
+    }
+
+    const reportTitle = afterData.title || "Incident Report";
+    const reasonText = (afterData.remarks || afterData.reason || "").trim();
+    const title = nextStatus === "resolved" ? "Complaint Resolved" : "Complaint Rejected";
+    const message = nextStatus === "resolved"
+      ? `Good news! Your complaint '${reportTitle}' has been resolved.`
+      : `Your complaint '${reportTitle}' was rejected.${reasonText ? ` ${reasonText}` : ""}`;
+
+    const notificationId = `${reportId}_${nextStatus}`;
 
     try {
-      // 1. Write in-app notification doc to the reporter's notifications subcollection
-      await admin
+      const userNotificationRef = admin
         .firestore()
         .collection("users")
         .doc(reporterUid)
         .collection("notifications")
-        .add({
-          title: title,
-          body: body,
-          type: "case_update",
-          referenceId: context.params.reportId,
+        .doc(notificationId);
+
+      const existing = await userNotificationRef.get();
+      if (!existing.exists) {
+        await userNotificationRef.set({
+          id: notificationId,
+          user_id: reporterUid,
+          type: "complaint_update",
+          title,
+          message,
+          body: message,
+          reference_id: reportId,
+          referenceId: reportId,
+          is_read: false,
           isRead: false,
+          created_at: admin.firestore.FieldValue.serverTimestamp(),
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+      }
 
-      // 2. Send targeted FCM push if reporter has saved fcmToken
       const userDoc = await admin.firestore().collection("users").doc(reporterUid).get();
-      if (userDoc.exists && userDoc.data().fcmToken) {
-        const token = userDoc.data().fcmToken;
-        await admin.messaging().send({
-          token: token,
-          notification: { title: title, body: body },
-          data: { type: "case_update", referenceId: context.params.reportId },
-        });
+      const userData = userDoc.exists ? userDoc.data() : {};
+      const tokenValues = [];
+      if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
+        tokenValues.push(...userData.fcmTokens.filter(Boolean));
+      }
+      if (userData.fcmToken && typeof userData.fcmToken === "string") {
+        tokenValues.push(userData.fcmToken);
+      }
+
+      const uniqueTokens = [...new Set(tokenValues)];
+      if (uniqueTokens.length > 0) {
+        await Promise.allSettled(
+          uniqueTokens.map((token) =>
+            admin.messaging().send({
+              token,
+              notification: { title, body: message },
+              data: { type: "complaint_update", referenceId: reportId },
+            })
+          )
+        );
       }
     } catch (e) {
       console.error("Report status notification notice:", e);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../app_state.dart';
+import 'community_report_details_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -13,16 +14,20 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _markAllAsRead(String uid) async {
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final notifsRef = FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
-          .collection('notifications')
-          .where('isRead', isEqualTo: false)
-          .get();
+          .collection('notifications');
 
+      final snapshot = await notifsRef.get();
       final batch = FirebaseFirestore.instance.batch();
+
       for (final doc in snapshot.docs) {
-        batch.update(doc.reference, {'isRead': true});
+        final data = doc.data();
+        final isRead = (data['isRead'] as bool?) ?? (data['is_read'] as bool?) ?? false;
+        if (!isRead) {
+          batch.update(doc.reference, {'isRead': true, 'is_read': true});
+        }
       }
       await batch.commit();
 
@@ -68,14 +73,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         ],
       ),
-      body: uid.isEmpty
-          ? const Center(child: Text('Please log in to view notifications.'))
+      body: uid.isEmpty || uid == 'guest_session'
+          ? const Center(child: Text('Please log in as a resident to view notifications.'))
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: FirebaseFirestore.instance
                   .collection('users')
                   .doc(uid)
                   .collection('notifications')
-                  .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
@@ -88,7 +92,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final docs = snapshot.data!.docs;
+                final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(snapshot.data!.docs);
+
+                // Sort client-side by created_at / createdAt descending
+                docs.sort((a, b) {
+                  final aData = a.data();
+                  final bData = b.data();
+                  final aTime = aData['createdAt'] ?? aData['created_at'] ?? aData['timestamp'];
+                  final bTime = bData['createdAt'] ?? bData['created_at'] ?? bData['timestamp'];
+                  
+                  DateTime aDt = DateTime.fromMillisecondsSinceEpoch(0);
+                  DateTime bDt = DateTime.fromMillisecondsSinceEpoch(0);
+
+                  if (aTime is Timestamp) aDt = aTime.toDate();
+                  if (bTime is Timestamp) bDt = bTime.toDate();
+
+                  return bDt.compareTo(aDt);
+                });
+
                 if (docs.isEmpty) {
                   return const Center(
                     child: Column(
@@ -112,9 +133,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     final data = doc.data();
                     final notifId = doc.id;
                     final title = (data['title'] as String?) ?? 'Update';
-                    final body = (data['body'] as String?) ?? '';
+                    final body = (data['message'] as String?) ?? (data['body'] as String?) ?? '';
                     final type = (data['type'] as String?) ?? 'announcement';
-                    final isRead = (data['isRead'] as bool?) ?? false;
+                    final isRead = (data['isRead'] as bool?) ?? (data['is_read'] as bool?) ?? false;
+                    final referenceId = (data['reference_id'] as String?) ?? (data['referenceId'] as String?) ?? '';
+
+                    final isComplaint = type == 'complaint_update' || type == 'case_update';
 
                     return Dismissible(
                       key: Key(notifId),
@@ -150,13 +174,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 .doc(uid)
                                 .collection('notifications')
                                 .doc(notifId)
-                                .update({'isRead': true});
+                                .update({'isRead': true, 'is_read': true});
+
+                            // Navigate to complaint details if referenceId matches a report
+                            if (referenceId.isNotEmpty && isComplaint) {
+                              final report = appState.getReportById(referenceId);
+                              if (report != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CommunityReportDetailsScreen(report: report),
+                                  ),
+                                );
+                              }
+                            }
                           },
                           leading: CircleAvatar(
-                            backgroundColor: type == 'case_update' ? const Color(0xFFFEF3C7) : const Color(0xFFDBEAFE),
+                            backgroundColor: isComplaint ? const Color(0xFFFEF3C7) : const Color(0xFFDBEAFE),
                             child: Icon(
-                              type == 'case_update' ? Icons.report_problem_outlined : Icons.campaign_outlined,
-                              color: type == 'case_update' ? const Color(0xFFD97706) : const Color(0xFF1D4ED8),
+                              isComplaint ? Icons.report_problem_outlined : Icons.campaign_outlined,
+                              color: isComplaint ? const Color(0xFFD97706) : const Color(0xFF1D4ED8),
                               size: 20,
                             ),
                           ),

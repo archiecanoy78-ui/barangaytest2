@@ -31,6 +31,9 @@ class _AppScaffoldState extends State<AppScaffold> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -38,6 +41,7 @@ class _AppScaffoldState extends State<AppScaffold> {
             IconButton(
               icon: const Icon(Icons.close_rounded, size: 20),
               onPressed: () => Navigator.pop(ctx),
+              tooltip: 'Close',
             ),
           ],
         ),
@@ -54,7 +58,7 @@ class _AppScaffoldState extends State<AppScaffold> {
                     final isEmergency = n['isEmergency'] == true;
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: isEmergency ? PortalColors.danger.withOpacity(0.15) : PortalColors.primary.withOpacity(0.1),
+                        backgroundColor: isEmergency ? PortalColors.dangerBg : PortalColors.blue50,
                         child: Icon(
                           isEmergency ? Icons.warning_amber_rounded : Icons.notifications_rounded,
                           color: isEmergency ? PortalColors.danger : PortalColors.primary,
@@ -71,7 +75,7 @@ class _AppScaffoldState extends State<AppScaffold> {
                       ),
                       subtitle: Text(
                         n['subtitle'] ?? '',
-                        style: const TextStyle(fontSize: 11, color: PortalColors.textMuted),
+                        style: const TextStyle(fontSize: 12, color: PortalColors.textMuted),
                       ),
                       onTap: () async {
                         final report = n['report'] as Report?;
@@ -102,15 +106,16 @@ class _AppScaffoldState extends State<AppScaffold> {
     final complaintCount = appState.reports.length;
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final bool isWide = screenWidth >= 900;
+    final bool isDesktop = screenWidth >= 1024;
 
-    final sidebarContent = Container(
+    Widget sidebarContent({bool isDrawer = false}) => Container(
       width: 260,
-      color: const Color(0xFFF8F8FB),
+      color: const Color(0xFFF8F9FC),
       child: Column(
         children: [
+          // Branding Header
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: PortalColors.border)),
             ),
@@ -127,13 +132,13 @@ class _AppScaffoldState extends State<AppScaffold> {
                     ),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: const [
-                      BoxShadow(color: Color(0x1A6366F1), blurRadius: 8, offset: Offset(0, 4)),
+                      BoxShadow(color: Color(0x1A4F46E5), blurRadius: 8, offset: Offset(0, 4)),
                     ],
                   ),
                   child: const Center(
                     child: Text(
-                      'BP',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      'BRGY',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5),
                     ),
                   ),
                 ),
@@ -143,7 +148,7 @@ class _AppScaffoldState extends State<AppScaffold> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
                       Text(
-                        'Barangay Portal',
+                        'Barangay Admin',
                         style: TextStyle(
                           color: PortalColors.textDark,
                           fontWeight: FontWeight.w800,
@@ -152,7 +157,7 @@ class _AppScaffoldState extends State<AppScaffold> {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'Official Admin Console',
+                        'Web Management Portal',
                         style: TextStyle(
                           color: PortalColors.textMuted,
                           fontSize: 11,
@@ -162,39 +167,48 @@ class _AppScaffoldState extends State<AppScaffold> {
                     ],
                   ),
                 ),
+                if (isDrawer)
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                  ),
               ],
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
+
+          // Navigation Links List
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               children: [
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(12, 4, 12, 10),
-                  child: Text('OVERVIEW', style: TextStyle(fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.w700, color: PortalColors.textMuted)),
+                  padding: EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: Text('OVERVIEW', style: TextStyle(fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.w800, color: PortalColors.textMuted)),
                 ),
-                _navItem(0, Icons.grid_view_rounded, 'Dashboard'),
-                _navItem(1, Icons.chat_bubble_outline_rounded, 'Complaints', badge: complaintCount),
+                _navItem(0, Icons.grid_view_rounded, 'Dashboard', isDrawer: isDrawer),
+                _navItem(1, Icons.chat_bubble_outline_rounded, 'Complaints', badge: complaintCount, isDrawer: isDrawer),
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(12, 18, 12, 10),
-                  child: Text('OPERATIONS', style: TextStyle(fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.w700, color: PortalColors.textMuted)),
+                  padding: EdgeInsets.fromLTRB(12, 16, 12, 8),
+                  child: Text('OPERATIONS', style: TextStyle(fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.w800, color: PortalColors.textMuted)),
                 ),
-                _navItem(2, Icons.people_outline_rounded, 'Residents'),
-                if (isAdmin) _navItem(3, Icons.badge_outlined, 'Staff Management'),
-                _navItem(4, Icons.forum_outlined, 'Messages'),
-                _navItem(5, Icons.campaign_outlined, 'Announcements'),
-                _navItem(6, Icons.map_outlined, 'Operations Map'),
-                _navItem(7, Icons.crisis_alert_rounded, 'Emergency Map'),
+                _navItem(2, Icons.people_outline_rounded, 'Residents', isDrawer: isDrawer),
+                if (isAdmin) _navItem(3, Icons.badge_outlined, 'Staff Management', isDrawer: isDrawer),
+                _navItem(4, Icons.forum_outlined, 'Messages', isDrawer: isDrawer),
+                _navItem(5, Icons.campaign_outlined, 'Announcements', isDrawer: isDrawer),
+                _navItem(6, Icons.map_outlined, 'Operations Map', isDrawer: isDrawer),
+                _navItem(7, Icons.crisis_alert_rounded, 'Emergency Map', isDrawer: isDrawer),
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(12, 18, 12, 10),
-                  child: Text('SYSTEM', style: TextStyle(fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.w700, color: PortalColors.textMuted)),
+                  padding: EdgeInsets.fromLTRB(12, 16, 12, 8),
+                  child: Text('SYSTEM', style: TextStyle(fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.w800, color: PortalColors.textMuted)),
                 ),
-                _navItem(8, Icons.history_edu_rounded, 'Activity Logs'),
-                _navItem(9, Icons.settings_outlined, 'System Settings'),
+                _navItem(8, Icons.history_edu_rounded, 'Activity Logs', isDrawer: isDrawer),
+                _navItem(9, Icons.settings_outlined, 'System Settings', isDrawer: isDrawer),
               ],
             ),
           ),
+
+          // User Footer
           Container(
             padding: const EdgeInsets.all(16),
             decoration: const BoxDecoration(
@@ -204,7 +218,7 @@ class _AppScaffoldState extends State<AppScaffold> {
               children: [
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: PortalColors.primary.withOpacity(0.08),
+                  backgroundColor: PortalColors.blue50,
                   child: Text(
                     (user?.name.isNotEmpty ?? false) ? user!.name.substring(0, 2).toUpperCase() : 'AD',
                     style: const TextStyle(color: PortalColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
@@ -228,10 +242,12 @@ class _AppScaffoldState extends State<AppScaffold> {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.logout_rounded, color: PortalColors.textMuted, size: 18),
-                  onPressed: () => appState.logout(),
-                  tooltip: 'Logout',
+                Tooltip(
+                  message: 'Sign Out',
+                  child: IconButton(
+                    icon: const Icon(Icons.logout_rounded, color: PortalColors.textMuted, size: 18),
+                    onPressed: () => appState.logout(),
+                  ),
                 ),
               ],
             ),
@@ -242,67 +258,74 @@ class _AppScaffoldState extends State<AppScaffold> {
 
     return Scaffold(
       backgroundColor: PortalColors.background,
-      drawer: isWide ? null : Drawer(child: sidebarContent),
+      drawer: isDesktop ? null : Drawer(child: sidebarContent(isDrawer: true)),
       body: Row(
         children: [
-          if (isWide) sidebarContent,
+          if (isDesktop) sidebarContent(),
           Expanded(
             child: Column(
               children: [
+                // Top Action Bar
                 Container(
-                  height: 72,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   decoration: const BoxDecoration(
                     color: PortalColors.surface,
                     border: Border(bottom: BorderSide(color: PortalColors.border)),
                   ),
                   child: Row(
                     children: [
-                      if (!isWide) ...[
+                      if (!isDesktop) ...[
                         Builder(
-                          builder: (context) => IconButton(
-                            icon: const Icon(Icons.menu_rounded),
-                            onPressed: () => Scaffold.of(context).openDrawer(),
+                          builder: (context) => Tooltip(
+                            message: 'Open Navigation Menu',
+                            child: IconButton(
+                              icon: const Icon(Icons.menu_rounded, color: PortalColors.textDark, size: 22),
+                              onPressed: () => Scaffold.of(context).openDrawer(),
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Barangay Portal',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: PortalColors.textDark),
+                        ),
                       ],
                       const Spacer(),
                       Consumer<AppState>(
                         builder: (context, appState, _) {
                           final unreadCount = appState.unreadStaffNotificationsCount;
-                          return Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeOut,
-                                child: IconButton(
+                          return Tooltip(
+                            message: 'Notifications',
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                IconButton(
                                   onPressed: () => _showNotificationsModal(context),
-                                  icon: const Icon(Icons.notifications_none_rounded, color: PortalColors.textDark),
+                                  icon: const Icon(Icons.notifications_none_rounded, color: PortalColors.textDark, size: 22),
                                 ),
-                              ),
-                              if (unreadCount > 0)
-                                Positioned(
-                                  right: 10,
-                                  top: 8,
-                                  child: Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: const BoxDecoration(
-                                      color: PortalColors.danger,
-                                      shape: BoxShape.circle,
+                                if (unreadCount > 0)
+                                  Positioned(
+                                    right: 8,
+                                    top: 8,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: PortalColors.danger,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
                                   ),
-                                ),
-                            ],
+                              ],
+                            ),
                           );
                         },
                       ),
                     ],
                   ),
                 ),
-                // Main Content View
+
+                // Main Dashboard Body
                 Expanded(child: widget.body),
               ],
             ),
@@ -312,23 +335,23 @@ class _AppScaffoldState extends State<AppScaffold> {
     );
   }
 
-  Widget _navItem(int index, IconData icon, String label, {int? badge}) {
+  Widget _navItem(int index, IconData icon, String label, {int? badge, bool isDrawer = false}) {
     final bool isSelected = widget.selectedIndex == index;
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 2),
       decoration: BoxDecoration(
         color: isSelected ? PortalColors.primary.withOpacity(0.08) : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Stack(
         children: [
           if (isSelected)
             Positioned(
               left: 0,
-              top: 8,
-              bottom: 8,
+              top: 6,
+              bottom: 6,
               child: Container(
-                width: 3,
+                width: 3.5,
                 decoration: BoxDecoration(
                   color: PortalColors.primary,
                   borderRadius: BorderRadius.circular(2),
@@ -336,7 +359,11 @@ class _AppScaffoldState extends State<AppScaffold> {
               ),
             ),
           ListTile(
-            onTap: () => widget.onDestinationSelected(index),
+            minVerticalPadding: 12,
+            onTap: () {
+              if (isDrawer) Navigator.pop(context);
+              widget.onDestinationSelected(index);
+            },
             leading: Icon(
               icon,
               size: 20,
@@ -352,9 +379,9 @@ class _AppScaffoldState extends State<AppScaffold> {
             ),
             trailing: badge != null && badge > 0
                 ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
-                      color: PortalColors.primary.withOpacity(0.15),
+                      color: PortalColors.primary.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -364,7 +391,7 @@ class _AppScaffoldState extends State<AppScaffold> {
                   )
                 : null,
             dense: true,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ],
       ),

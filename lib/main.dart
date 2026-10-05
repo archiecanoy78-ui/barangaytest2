@@ -9,6 +9,7 @@ import 'models/user.dart';
 import 'resident/screens/registration_screen.dart';
 import 'staff/staff_main.dart';
 import 'resident/resident_main.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,12 +65,80 @@ class BarangayApp extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // On app resume, silently re-validate user session without forcing logout
+    if (state == AppLifecycleState.resumed) {
+      final appState = context.read<AppState>();
+      if (appState.currentUser != null) {
+        debugPrint("App resumed: re-validating session for ${appState.currentUser?.username}");
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
+
+    if (appState.isInitializing) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0F172A),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: CircularProgressIndicator(
+                  color: Color(0xFF2563EB),
+                  strokeWidth: 3,
+                ),
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Barangay Central',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Restoring secure session...',
+                style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Initialize FCM notification listener for logged-in user
+    if (appState.currentUser != null && appState.currentUser!.id.isNotEmpty) {
+      NotificationService().initialize(context, appState.currentUser!.id);
+    }
 
     if (kIsWeb) {
       // WEB APP EXPERIENCE: Strictly for Admin & Staff Web Portal
@@ -370,77 +439,77 @@ class WebResidentRestrictedScreen extends StatelessWidget {
           child: Container(
             margin: const EdgeInsets.all(24),
             padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0A000000),
-                blurRadius: 16,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFEF3C7),
-                  shape: BoxShape.circle,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A000000),
+                  blurRadius: 16,
+                  offset: Offset(0, 8),
                 ),
-                child: const Icon(
-                  Icons.phone_android_rounded,
-                  color: Color(0xFFD97706),
-                  size: 32,
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFEF3C7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.phone_android_rounded,
+                    color: Color(0xFFD97706),
+                    size: 32,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Mobile App Exclusive',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF0F172A),
+                const SizedBox(height: 20),
+                const Text(
+                  'Mobile App Exclusive',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Resident and Guest complaint features are available on the Barangay Mobile App. This Web Portal is reserved exclusively for Barangay Admin & Staff management.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF64748B),
-                  height: 1.5,
+                const SizedBox(height: 12),
+                const Text(
+                  'Resident and Guest complaint features are available on the Barangay Mobile App. This Web Portal is reserved exclusively for Barangay Admin & Staff management.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF64748B),
+                    height: 1.5,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => context.read<AppState>().logout(),
-                  icon: const Icon(Icons.logout_rounded),
-                  label: const Text('Return to Admin Portal Login'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => context.read<AppState>().logout(),
+                    icon: const Icon(Icons.logout_rounded),
+                    label: const Text('Return to Admin Portal Login'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 /// Mobile Login & Portal Selection Screen (Mobile App)
