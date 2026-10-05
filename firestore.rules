@@ -69,10 +69,18 @@ service cloud.firestore {
       }
     }
 
+    function isFinishedReport(data) {
+      return data.status == 'resolved' || data.status == 'rejected';
+    }
+
     // Reports & Incidents Rules
     match /reports/{reportId} {
       allow read: if isActiveUser();
-      allow create, update: if isActiveUser();
+      allow create: if isActiveUser();
+      allow update: if isActiveUser() && (
+        !isFinishedReport(resource.data) ||
+        (isAdmin() && request.resource.data.status == 'pending')
+      );
       allow delete: if isAdmin();
     }
 
